@@ -1,6 +1,6 @@
 // Service worker do Cadeira Cheia: guarda o app no aparelho para abrir sem internet.
 // Ao publicar uma versão nova do app, troque o número abaixo (v1 -> v2) para os celulares baixarem a atualização.
-const VERSION = 'cadeira-cheia-v1';
+const VERSION = 'cadeira-cheia-v2';
 const SHELL = [
   './',
   './index.html',
@@ -39,7 +39,8 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Fontes do Google e arquivos do próprio app: usa a cópia guardada e busca na rede só se faltar.
-  if (url.origin === location.origin || url.hostname.endsWith('fonts.googleapis.com') || url.hostname.endsWith('fonts.gstatic.com')) {
+  // Chamadas ao banco (supabase.co) nunca passam pelo cache: sempre dados atuais.
+  if (url.origin === location.origin || url.hostname.endsWith('fonts.googleapis.com') || url.hostname.endsWith('fonts.gstatic.com') || url.hostname === 'cdn.jsdelivr.net') {
     event.respondWith(
       caches.match(req).then((hit) => hit || fetch(req).then((res) => {
         if (res.ok || res.type === 'opaque') { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }

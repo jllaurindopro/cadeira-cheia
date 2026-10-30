@@ -166,24 +166,35 @@ details summary{cursor:pointer;margin-bottom:8px;width:max-content}
 .switch input:checked+span::after{left:19px}
 .switch input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+body.solo .side{display:none} body.solo .shell{display:block}
+.authbox{max-width:400px;margin:6vh auto 0;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center}
+.authbox.wide{max-width:520px}
+.authbox form{text-align:left}
+.mark.big{width:56px;height:56px;border-radius:14px;font-size:20px}
+.me{display:flex;flex-direction:column;min-width:0}
+.me b{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.me small{font-size:12px;color:var(--muted)}
+.demo.ok::before{background:var(--ok)}
+.code{font:700 15px ui-monospace,Menlo,monospace;letter-spacing:.08em}
+.linkbox{font-size:13px;word-break:break-all;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+#outM{display:none}
+@media (max-width:899px){#outM:not([hidden]){display:inline-block}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
 <div class="shell">
 <aside class="side">
   <div class="sidetop">
-    <div class="brand"><div class="mark" aria-hidden="true">CC</div><div><b>Cadeira Cheia</b><small id="shopName">Barbearia Exemplo</small></div></div>
-    <label class="mobile-role"><span class="sr">Ver como</span><select id="roleSelM" aria-label="Ver como"></select></label>
+    <div class="brand"><div class="mark" aria-hidden="true">CC</div><div><b>Cadeira Cheia</b><small id="shopName"></small></div></div>
+    <button class="small ghost" id="outM" data-g="logout" hidden>Sair</button>
   </div>
   <nav role="tablist" id="tabs"></nav>
-  <div class="side-foot">
-    <label class="viewas">Ver como<select id="roleSel"></select></label>
-    <span class="demo">Ambiente de demonstração</span>
-  </div>
+  <div class="side-foot" id="sideFoot"></div>
 </aside>
 <main id="app"></main>
 </div>
 <div id="modalRoot"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <div id="toastRoot"></div>
 
 <script>
@@ -233,22 +244,297 @@ function seed(){
     club:{every:10,plan:'Clube Cadeira Cheia',price:99},
     auto:{confirm:true,remind:true,after:true,away:true},msgs:[]};
 }
-let S;
-try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){S=null}
-if(!S||!S.barbers) S=seed();
-/* complementa dados salvos de versões anteriores */
-S.owner=S.owner||{name:'Dono',phone:'(32) 99900-1122'};
-S.barbers.forEach((b,i)=>{if(b.phone===undefined)b.phone='(32) 9'+(8811+i*137)+'-'+(2040+i*311)});
-S.auto=Object.assign({confirm:true,remind:true,after:true,away:true,barberNew:true,barberDaily:true,ownerDaily:true,ownerMonth:true},S.auto||{});
-S.msgs=S.msgs||[];
-if(S.showPhones===undefined) S.showPhones=false;
-S.optout=S.optout||['Caio','Enzo'];
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+/* ---------- NUVEM (Supabase): login, dados compartilhados e tempo real ---------- */
+const SB_URL='https://cgafuxxdatlwyiwdozym.supabase.co', SB_KEY='sb_publishable_S34gOPlyUgCCymaB4fb_ZA_e-tm1p7E';
+const sb=(window.supabase&&window.supabase.createClient)?window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
+const QS=new URLSearchParams(location.search);
+const SHOP_LINK=QS.get('b');
+const MODE=SHOP_LINK?'cliente':'equipe';
+const APP_URL=location.origin+location.pathname;
+const empty=()=>({shop:'',barbers:[],services:[],appts:[],products:[],sales:[],msgs:[],prodCom:10,client:{name:'',phone:'',member:false},club:{every:10,plan:'Clube',price:99},auto:{},owner:{name:'Dono',phone:''},optout:[],showPhones:false});
+let S=empty();
+function normalize(){
+  S.owner=Object.assign({name:'Dono',phone:''},S.owner||{});
+  S.auto=Object.assign({confirm:true,remind:true,after:true,away:true,barberNew:true,barberDaily:true,ownerDaily:true,ownerMonth:true},S.auto||{});
+  S.club=Object.assign({every:10,plan:'Clube',price:99},S.club||{});
+  S.msgs=S.msgs||[]; if(S.showPhones===undefined)S.showPhones=false; S.optout=S.optout||[]; if(S.prodCom===undefined)S.prodCom=10;
+  S.client=S.client||{name:'',phone:'',member:false};
+}
+const ME={user:null,email:'',shopId:null,owner:false,barberId:null};
+const CL={visits:0,ids:[]};
+const num=v=>Number(v)||0;
+const T={
+  barbers:{key:'barbers',mod:q=>q.order('created_at').order('id'),
+    to:b=>({id:b.id,name:b.name,phone:b.phone||'',com:num(b.com),invite:b.invite||null}),
+    from:r=>({id:r.id,name:r.name,phone:r.phone||'',com:num(r.com),invite:r.invite||null,linked:!!r.user_id})},
+  services:{key:'services',mod:q=>q.order('created_at').order('id'),
+    to:s=>({id:s.id,name:s.name,price:num(s.price)}),
+    from:r=>({id:r.id,name:r.name,price:num(r.price)})},
+  appointments:{key:'appts',mod:q=>q.gte('date',iso(new Date(Date.now()-400*864e5))).order('date').order('id'),
+    to:a=>({id:a.id,date:a.date,time:a.time,barber_id:a.barberId,service_id:a.serviceId,price:num(a.price),client:a.client||'',phone:a.phone||'',status:a.status||'agendado'}),
+    from:r=>({id:r.id,date:r.date,time:r.time,barberId:r.barber_id,serviceId:r.service_id,price:num(r.price),client:r.client||'',phone:r.phone||'',status:r.status,source:r.source})},
+  products:{key:'products',mod:q=>q.order('created_at').order('id'),
+    to:p=>({id:p.id,name:p.name,qty:Math.round(num(p.qty)),min:Math.round(num(p.min)),price:num(p.price)}),
+    from:r=>({id:r.id,name:r.name,qty:num(r.qty),min:num(r.min),price:num(r.price)})},
+  sales:{key:'sales',mod:q=>q.gte('date',iso(new Date(Date.now()-400*864e5))).order('date').order('id'),
+    to:s=>({id:s.id,date:s.date,product_id:s.productId,qty:Math.round(num(s.qty)),price:num(s.price),barber_id:s.barberId}),
+    from:r=>({id:r.id,date:r.date,productId:r.product_id,qty:num(r.qty),price:num(r.price),barberId:r.barber_id})},
+  messages:{key:'msgs',
+    to:m=>({id:m.id,at:m.at,kind:m.kind||'',to:m.to||'',phone:m.phone||'',text:m.text||'',aud:m.aud||'cliente'}),
+    from:r=>({id:r.id,at:r.at,kind:r.kind,to:r.to,phone:r.phone,text:r.text,aud:r.aud})}
+};
+const settingsOf=()=>({owner:S.owner,auto:S.auto,club:S.club,prodCom:S.prodCom,optout:S.optout,showPhones:S.showPhones});
+const shopJSON=()=>JSON.stringify({name:S.shop,settings:settingsOf()});
+const snap={};
+const rowsMap=t=>new Map(S[T[t].key].map(x=>[x.id,JSON.stringify(T[t].to(x))]));
+const takeSnap=t=>{snap[t]=rowsMap(t)};
+
+async function fetchAll(t){
+  let out=[],from=0;
+  for(;;){let q=sb.from(t).select('*').eq('shop_id',ME.shopId);if(T[t].mod)q=T[t].mod(q);
+    const {data,error}=await q.range(from,from+999); if(error) throw error;
+    out=out.concat(data||[]); if(!data||data.length<1000) break; from+=1000}
+  return out;
+}
+async function loadShop(){
+  const {data,error}=await sb.from('shops').select('*').eq('id',ME.shopId).single(); if(error) throw error;
+  const st=data.settings||{}; S.shop=data.name;
+  S.owner=st.owner; S.auto=st.auto; S.club=st.club; S.prodCom=st.prodCom; S.optout=st.optout; S.showPhones=st.showPhones;
+  normalize(); snap.shop=shopJSON();
+}
+async function loadTable(t){
+  if(t==='messages'){const {data,error}=await sb.from('messages').select('*').eq('shop_id',ME.shopId).order('at',{ascending:false}).limit(80);if(error)throw error;S.msgs=(data||[]).map(T.messages.from)}
+  else S[T[t].key]=(await fetchAll(t)).map(T[t].from);
+  takeSnap(t);
+}
+async function loadAll(){
+  await loadShop();
+  await Promise.all(['barbers','services','appointments','products','sales','messages'].map(loadTable));
+  if(!S.barbers.some(b=>b.id===ui.saleBy)) ui.saleBy=S.barbers[0]?S.barbers[0].id:'';
+}
+
+let flushT=null, flushing=false, again=false;
+const save=()=>{if(MODE!=='equipe'||!ME.shopId) return; clearTimeout(flushT); flushT=setTimeout(()=>{flushT=null;flush()},250)};
+async function flush(){
+  if(flushing){again=true;return} flushing=true; let failed=false;
+  try{
+    const tables=ME.owner?['barbers','services','products','appointments','sales','messages']:['appointments','messages'];
+    for(const t of tables){
+      const cur=rowsMap(t), old=snap[t]||new Map();
+      const up=[]; cur.forEach((v,id)=>{if(old.get(id)!==v) up.push(Object.assign(JSON.parse(v),{shop_id:ME.shopId}))});
+      const del=[]; if(t!=='messages'||ME.owner) old.forEach((v,id)=>{if(!cur.has(id)) del.push(id)});
+      if(up.length){const {error}=t==='messages'?await sb.from(t).upsert(up,{onConflict:'id',ignoreDuplicates:true}):await sb.from(t).upsert(up,{onConflict:'id'});
+        if(error){failed=true;console.error(t,error)} else up.forEach(r=>old.set(r.id,cur.get(r.id)))}
+      if(del.length){const {error}=await sb.from(t).delete().in('id',del);
+        if(error){failed=true;console.error(t,error)} else del.forEach(id=>old.delete(id))}
+      snap[t]=old;
+    }
+    if(ME.owner){const s=shopJSON(); if(s!==snap.shop){const {error}=await sb.from('shops').update(JSON.parse(s)).eq('id',ME.shopId); if(error){failed=true;console.error(error)} else snap.shop=s}}
+  }catch(e){failed=true;console.error(e)}
+  flushing=false;
+  if(failed){toast('Não consegui salvar. Confira a internet: recarreguei os dados da nuvem.'); try{await loadAll()}catch(e){} render()}
+  if(again){again=false;flush()}
+}
+
+/* tempo real: quando outro aparelho muda algo, a tela atualiza sozinha */
+const rtT={};
+function queueReload(t){clearTimeout(rtT[t]);rtT[t]=setTimeout(()=>reloadTable(t),400)}
+async function reloadTable(t){
+  if(flushing||flushT){queueReload(t);return}
+  try{ if(t==='shops') await loadShop(); else await loadTable(t); softRender() }catch(e){console.error(e)}
+}
+function subscribe(){
+  const ch=sb.channel('loja-'+ME.shopId);
+  ['appointments','barbers','services','products','sales'].forEach(t=>ch.on('postgres_changes',{event:'*',schema:'public',table:t,filter:'shop_id=eq.'+ME.shopId},()=>queueReload(t)));
+  ch.on('postgres_changes',{event:'UPDATE',schema:'public',table:'shops',filter:'id=eq.'+ME.shopId},()=>queueReload('shops'));
+  ch.subscribe();
+}
+const typing=()=>{const a=document.activeElement;return a&&app.contains(a)&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)};
+function softRender(){if(!ui.ready)return; if(typing()||document.querySelector('#modalRoot .modal')){ui.pendingRender=true;return} render()}
+
+/* ---------- telas de entrada (equipe) ---------- */
+const codeGen=()=>{const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const r=new Uint32Array(6);crypto.getRandomValues(r);return Array.from(r,x=>A[x%A.length]).join('')};
+const authMsg=m=>{m=String(m||'');
+  if(/invalid login/i.test(m)) return 'E-mail ou senha incorretos.';
+  if(/already registered|already exists/i.test(m)) return 'Esse e-mail já tem conta. Use “Entrar”.';
+  if(/not confirmed/i.test(m)) return 'Confirme seu e-mail antes de entrar.';
+  if(/not authorized/i.test(m)) return 'O cadastro com confirmação por e-mail ainda não está liberado nesta barbearia. Fale com o dono.';
+  if(/password/i.test(m)&&/6/.test(m)) return 'A senha precisa ter pelo menos 6 caracteres.';
+  if(/rate limit|too many/i.test(m)) return 'Muitas tentativas. Espere alguns minutos e tente de novo.';
+  if(/valid email|invalid email/i.test(m)) return 'E-mail inválido.';
+  return 'Não deu certo: '+m};
+function solo(on){document.body.classList.toggle('solo',!!on)}
+function showLoading(msg){solo(true);app.innerHTML=`<div class="authbox"><div class="mark big" aria-hidden="true">CC</div><p class="note">${esc(msg||'Carregando…')}</p></div>`}
+function showLogin(mode){
+  ui.ready=false; solo(true); const signup=mode==='signup';
+  app.innerHTML=`<div class="authbox">
+    <div class="mark big" aria-hidden="true">CC</div>
+    <div><h2>Cadeira Cheia</h2><div class="note">${signup?'Crie sua conta para começar':'Entre para ver a agenda da barbearia'}</div></div>
+    <form class="panel stack" id="authForm" style="width:100%">
+      <label>E-mail<input id="auEmail" type="email" autocomplete="email" required></label>
+      <label>Senha<input id="auPass" type="password" autocomplete="${signup?'new-password':'current-password'}" minlength="6" required></label>
+      <div class="note" id="auErr" role="alert"></div>
+      <button class="primary" type="submit">${signup?'Criar conta':'Entrar'}</button>
+    </form>
+    <button class="ghost" data-g="${signup?'toLogin':'toSignup'}">${signup?'Já tenho conta: entrar':'Primeira vez? Criar conta'}</button>
+  </div>`;
+  ui.authMode=signup?'signup':'login';
+  const f=document.getElementById('auEmail'); f&&f.focus();
+}
+function showFirstAccess(){
+  ui.ready=false; solo(true);
+  app.innerHTML=`<div class="authbox wide">
+    <div><h2>Bem-vindo!</h2><div class="note">Conta: ${esc(ME.email)}</div></div>
+    <form class="panel stack" id="joinForm" style="width:100%">
+      <h3 style="margin:0">Sou barbeiro</h3>
+      <div class="note">Peça ao dono o seu código de convite (ele aparece em “Equipe e preços”).</div>
+      <label>Código de convite<input id="joinCode" autocomplete="off" autocapitalize="characters" required minlength="6" maxlength="12" placeholder="Ex.: K7M2QX"></label>
+      <div class="note" id="joinErr" role="alert"></div>
+      <button class="primary" type="submit">Entrar na equipe</button>
+    </form>
+    <form class="panel stack" id="shopForm" style="width:100%">
+      <h3 style="margin:0">Sou o dono</h3>
+      <div class="note">Crie a sua barbearia. Depois você cadastra os barbeiros e os preços.</div>
+      <label>Nome da barbearia<input id="shName" required maxlength="60" placeholder="Ex.: Barbearia do Zé"></label>
+      <label>Seu nome<input id="shOwner" required maxlength="40"></label>
+      <label>Seu WhatsApp<input id="shPhone" type="tel" inputmode="tel" placeholder="(32) 99999-9999"></label>
+      <label class="opt" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="shCuts" checked style="width:auto"> Eu também atendo como barbeiro</label>
+      <div class="note" id="shopErr" role="alert"></div>
+      <button type="submit">Criar barbearia</button>
+    </form>
+    <button class="ghost" data-g="logout">Sair</button>
+  </div>`;
+}
+async function enter(user){
+  ME.user=user; ME.email=user.email||''; ME.owner=false; ME.barberId=null; ME.shopId=null;
+  showLoading('Abrindo a barbearia…');
+  try{
+    const {data:shop,error:e1}=await sb.from('shops').select('id').eq('owner_id',user.id).maybeSingle(); if(e1) throw e1;
+    if(shop){ME.shopId=shop.id;ME.owner=true;ui.role='dono';ui.barber='all'}
+    else{const {data:b,error:e2}=await sb.from('barbers').select('id,shop_id').eq('user_id',user.id).limit(1).maybeSingle(); if(e2) throw e2;
+      if(!b) return showFirstAccess();
+      ME.shopId=b.shop_id;ME.barberId=b.id;ui.role=b.id;ui.barber=b.id}
+    await loadAll(); subscribe(); solo(false); setChrome(); ui.ready=true; ui.tab='agenda'; render();
+  }catch(e){console.error(e);app.innerHTML=`<div class="authbox"><p>Não consegui carregar os dados. Confira a internet.</p><button class="primary" data-g="retry">Tentar de novo</button><button class="ghost" data-g="logout">Sair</button></div>`}
+}
+async function createShop(){
+  const v=id=>document.getElementById(id).value.trim(); const err=document.getElementById('shopErr');
+  const name=v('shName'), owner=v('shOwner'), phone=v('shPhone'), cuts=document.getElementById('shCuts').checked;
+  if(name.length<2||owner.length<2){err.textContent='Preencha o nome da barbearia e o seu nome.';return}
+  err.textContent='Criando…';
+  const {data,error}=await sb.from('shops').insert({name,owner_id:ME.user.id,settings:{owner:{name:owner,phone},prodCom:10,club:{every:10,plan:'Clube '+name,price:99}}}).select('id').single();
+  if(error){err.textContent='Não deu certo: '+error.message;return}
+  const sid=data.id;
+  await sb.from('services').insert([['Corte',40],['Barba',30],['Corte + barba',60],['Pezinho',15],['Sobrancelha',15]].map(([n,p],i)=>({id:uid()+i,shop_id:sid,name:n,price:p,created_at:new Date(Date.now()+i*1000).toISOString()})));
+  if(cuts) await sb.from('barbers').insert({id:uid(),shop_id:sid,name:owner,phone,com:0});
+  await enter(ME.user); ui.tab='ajustes'; render(); toast('Barbearia criada! Confira a equipe e os preços.');
+}
+async function joinShop(){
+  const code=document.getElementById('joinCode').value.trim(); const err=document.getElementById('joinErr');
+  err.textContent='Conferindo…';
+  const {data,error}=await sb.rpc('link_code',{p_code:code});
+  if(error||!data){err.textContent='Código inválido ou já usado. Confira com o dono.';return}
+  await enter(ME.user);
+}
+document.addEventListener('submit',async e=>{
+  const f=e.target; if(!['authForm','joinForm','shopForm'].includes(f.id)) return; e.preventDefault(); e.stopImmediatePropagation();
+  const btn=f.querySelector('button[type=submit]'); if(btn) btn.disabled=true;
+  try{
+    if(f.id==='authForm'){
+      const email=document.getElementById('auEmail').value.trim(), password=document.getElementById('auPass').value, err=document.getElementById('auErr');
+      err.textContent='';
+      const r=ui.authMode==='signup'?await sb.auth.signUp({email,password,options:{emailRedirectTo:APP_URL}}):await sb.auth.signInWithPassword({email,password});
+      if(r.error){err.textContent=authMsg(r.error.message);return}
+      if(!r.data.session){err.textContent='Conta criada. Confirme pelo link enviado ao seu e-mail e depois entre.';return}
+      await enter(r.data.session.user);
+    }
+    else if(f.id==='joinForm') await joinShop();
+    else await createShop();
+  } finally { if(btn&&document.body.contains(btn)) btn.disabled=false }
+},true);
+document.addEventListener('click',async e=>{
+  const g=e.target.closest('[data-g]'); if(!g) return; const k=g.dataset.g;
+  if(k==='toSignup') showLogin('signup');
+  else if(k==='toLogin') showLogin('login');
+  else if(k==='logout'){await sb.auth.signOut(); location.replace(APP_URL)}
+  else if(k==='retry'){const {data:{session}}=await sb.auth.getSession(); session?enter(session.user):showLogin()}
+  else if(k==='copyLink'){const url=APP_URL+'?b='+ME.shopId; (navigator.clipboard?navigator.clipboard.writeText(url):Promise.reject()).then(()=>toast('Link copiado')).catch(()=>share('Link de agendamento',url))}
+  else if(k==='shareLink'){const url=APP_URL+'?b='+ME.shopId; window.open('https://wa.me/?text='+encodeURIComponent(`Agora você marca seu horário na ${S.shop} pelo celular, sem precisar mandar mensagem: ${url}`),'_blank')}
+  else if(k==='sendInvite'){const b=B(g.dataset.id); const txt=`Oi, ${b.name}! Para usar o app da ${S.shop}:\n1. Abra ${APP_URL}\n2. Toque em “Primeira vez? Criar conta”\n3. Depois digite o código de convite: ${b.invite}`;
+    const ph=String(b.phone||'').replace(/\D/g,''); window.open('https://wa.me/'+(ph?(ph.length<=11?'55':'')+ph:'')+'?text='+encodeURIComponent(txt),'_blank')}
+  else if(k==='newInvite'){const b=B(g.dataset.id); b.invite=codeGen(); save(); render(); toast('Novo código criado para '+b.name)}
+});
+/* ---------- link público do cliente ---------- */
+const LSK='cc-cliente-'+(SHOP_LINK||'');
+function clLoad(){try{const j=JSON.parse(localStorage.getItem(LSK)||'{}');S.client={name:j.name||'',phone:j.phone||'',member:false};CL.ids=Array.isArray(j.ids)?j.ids:[]}catch(e){}}
+function clSave(){try{localStorage.setItem(LSK,JSON.stringify({name:S.client.name,phone:S.client.phone,ids:CL.ids.slice(-30)}))}catch(e){}}
+async function clientRefresh(){
+  const {data,error}=await sb.rpc('public_shop',{p_shop:SHOP_LINK});
+  if(error||!data) throw new Error('link');
+  S.shop=data.name; S.barbers=(data.barbers||[]).map(b=>({id:b.id,name:b.name,com:0,phone:''})); S.services=data.services||[];
+  S.club=data.club||{}; S.owner={name:'',phone:data.ownerPhone||''}; normalize(); S.auto.confirm=false;
+  const busy=(data.busy||[]).map((x,i)=>({id:'busy-'+i,date:x.date,time:x.time,barberId:x.barberId,status:'agendado',client:'',phone:'',price:0}));
+  let mine=[];
+  if(CL.ids.length&&S.client.phone){const r=await sb.rpc('client_appts',{p_shop:SHOP_LINK,p_ids:CL.ids,p_phone:S.client.phone});
+    if(!r.error&&r.data){mine=(r.data.appts||[]).map(a=>Object.assign(a,{price:num(a.price),client:S.client.name,phone:S.client.phone}));CL.visits=num(r.data.visits)}}
+  S.appts=busy.concat(mine);
+}
+async function bootClient(){
+  ui.role='cliente'; ui.tab='marcar'; clLoad(); showLoading('Carregando a agenda…');
+  try{await clientRefresh()}catch(e){app.innerHTML='<div class="authbox"><h2>Link inválido</h2><p class="note">Peça para a barbearia o link de agendamento atualizado.</p></div>';return}
+  try{const ic=n=>new URL(n,APP_URL).href;
+    const man={name:S.shop,short_name:S.shop.slice(0,12),start_url:location.href,scope:APP_URL,display:'standalone',background_color:'#f5f6f8',theme_color:'#0f6a52',
+      icons:[{src:ic('icon-192.png'),sizes:'192x192',type:'image/png'},{src:ic('icon-512.png'),sizes:'512x512',type:'image/png'},{src:ic('icon-maskable-512.png'),sizes:'512x512',type:'image/png',purpose:'maskable'}]};
+    const l=document.querySelector('link[rel=manifest]'); if(l) l.href='data:application/manifest+json,'+encodeURIComponent(JSON.stringify(man));
+    document.title='Agendar · '+S.shop;}catch(e){}
+  solo(false); setChrome(); ui.ready=true; render();
+}
+async function clientBook(){
+  const k=ui.bk, name=(S.client.name||'').trim(), phone=(S.client.phone||'').trim();
+  if(name.length<2){toast('Digite o seu nome');document.getElementById('clName')?.focus();return}
+  if(phone.replace(/\D/g,'').length<10){toast('Digite o seu WhatsApp com DDD');document.getElementById('clPhone')?.focus();return}
+  const btn=app.querySelector('[data-act=bkConfirm]'); if(btn){btn.disabled=true;btn.textContent='Marcando…'}
+  const {data,error}=await sb.rpc('book',{p_shop:SHOP_LINK,p_date:k.day,p_time:k.time,p_barber:k.barber,p_service:k.service,p_client:name,p_phone:phone});
+  if(error||!data){const m=(error&&error.message)||'';
+    toast(/ocupado/.test(m)?'Esse horário acabou de ser ocupado. Escolha outro.':/limite/.test(m)?'Você já tem 3 horários marcados. Cancele um para marcar outro.':/telefone/.test(m)?'WhatsApp inválido. Use DDD + número.':/nome/.test(m)?'Nome inválido.':/data/.test(m)?'Esse dia não está disponível.':'Não consegui marcar. Confira a internet e tente de novo.');
+    delete k.time; try{await clientRefresh()}catch(e){} render(); return}
+  S.client.name=name;S.client.phone=phone; CL.ids.push(data.id); clSave();
+  try{await clientRefresh()}catch(e){}
+  ui.bk={}; ui.bkDone=data.id; render(); window.scrollTo(0,0);
+}
+async function clientCancel(id){
+  const {data,error}=await sb.rpc('client_cancel',{p_shop:SHOP_LINK,p_id:id,p_phone:S.client.phone});
+  if(error||!data){toast('Não consegui cancelar. Fale com a barbearia.');return}
+  CL.ids=CL.ids.filter(x=>x!==id); clSave(); try{await clientRefresh()}catch(e){} render(); toast('Horário cancelado. O horário voltou a ficar livre.');
+}
+function setChrome(){
+  const foot=document.getElementById('sideFoot'), out=document.getElementById('outM');
+  if(MODE==='cliente'){foot.innerHTML='<span class="demo ok">Agendamento online</span>';out.hidden=true;return}
+  const role=ME.owner?'Dono':'Barbeiro · '+B(ME.barberId).name;
+  foot.innerHTML=`<div class="me"><b>${esc(ME.email)}</b><small>${esc(role)}</small></div><button class="small" data-g="logout">Sair</button>`;
+  out.hidden=false;
+}
+function wire(){
+app.addEventListener('focusout',()=>{if(!ui.pendingRender)return;setTimeout(()=>{if(!typing()&&ui.pendingRender){ui.pendingRender=false;render()}},60)});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&MODE==='equipe'&&ui.ready&&!flushing&&!flushT){loadAll().then(softRender).catch(()=>{})}});
+
+}
+async function boot(){
+  wire();
+  if(!sb){app.innerHTML='<div class="authbox"><h2>Sem conexão</h2><p class="note">Abra o app com internet para carregar.</p></div>';return}
+  if(MODE==='cliente') return bootClient();
+  sb.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_OUT'&&ui.ready) location.replace(APP_URL)});
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session) return showLogin();
+  await enter(session.user);
+}
+
 
 const ui={bk:{},bkDone:null,role:'dono',tab:'agenda',day:today,barber:'all',month:today.slice(0,7),addOpen:false,resetArm:false,saleBy:S.barbers[0]?S.barbers[0].id:''};
 const B=id=>S.barbers.find(b=>b.id===id)||{name:'—',com:0};
 const SV=id=>S.services.find(s=>s.id===id)||{name:'—',price:0};
 
+function confirmArm(t,label){if(t.dataset.armed){return true}t.dataset.armed='1';const old=t.textContent;t.textContent=label;setTimeout(()=>{if(document.body.contains(t)){delete t.dataset.armed;t.textContent=old}},3500);return false}
 function toast(msg){const t=document.getElementById('toastRoot');t.innerHTML='<div class="toast" role="status">'+esc(msg)+'</div>';clearTimeout(toast.t);toast.t=setTimeout(()=>t.innerHTML='',2200)}
 function share(title,text){
   const done=()=>toast('Copiado. É só colar no WhatsApp.');
@@ -426,7 +712,7 @@ function meumes(){
 }
 
 /* ---------- MENSAGENS ---------- */
-const clubCount=name=>S.appts.filter(a=>a.client===name&&a.status==='atendido').length;
+const clubCount=name=>MODE==='cliente'?CL.visits:S.appts.filter(a=>a.client===name&&a.status==='atendido').length;
 function msgConfirm(a){return `Olá, ${a.client}! Seu horário está confirmado\n${fmtDay(a.date)}, às ${a.time}\n${SV(a.serviceId).name} com ${B(a.barberId).name}\n${S.shop}\n\nPrecisa remarcar? É só responder esta mensagem.`}
 function msgAfter(a){const n=clubCount(a.client)%S.club.every;
   return `Valeu pela visita, ${a.client}! Como foi o ${SV(a.serviceId).name.toLowerCase()} com o ${B(a.barberId).name}? Responda com uma nota de 1 a 5.\n\nClube: você está com ${n} de ${S.club.every} selos.${n===0?' Seu próximo corte é por nossa conta.':''}`}
@@ -452,15 +738,16 @@ function slotsFor(day,barber){
   return out;
 }
 function openDays(){const out=[];const d=new Date();while(out.length<7){if(d.getDay()!==0)out.push(iso(d));d.setDate(d.getDate()+1)}return out}
-function clientBar(){return `<div class="rolebar">Visão do cliente: é o que ele vê no celular, pelo link da barbearia.</div>`}
+function clientBar(){return ''}
 function marcar(){
   const k=ui.bk;
+  if(!S.services.length||!S.barbers.length) return `<div class="stack"><div class="panel empty">A barbearia ainda está montando a agenda online. Volte daqui a pouco.</div></div>`;
   if(ui.bkDone){const a=S.appts.find(x=>x.id===ui.bkDone);if(a) return `<div class="stack">${clientBar()}
     <div class="panel stack" style="text-align:center;align-items:center;padding:28px 14px">
       <div class="bigcheck" aria-hidden="true">✓</div>
       <h2>Horário marcado</h2>
       <div>${esc(fmtDay(a.date))}, às <b>${a.time}</b><br>${esc(SV(a.serviceId).name)} com ${esc(B(a.barberId).name)} · ${money(a.price)}</div>
-      ${S.auto.confirm?`<div class="note">A confirmação foi enviada para o seu WhatsApp. Um dia antes, você recebe um lembrete.</div>`:''}
+      <div class="note">Se precisar desmarcar, é só ir em “Meus horários”.</div>
       <div class="row" style="justify-content:center"><button data-act="go" data-t="meus">Ver meus horários</button><button class="primary" data-act="bkNew">Marcar outro</button></div>
     </div></div>`}
   const step=(n,title,body,on)=>`<div class="panel ${on?'':'off'}"><h3><span class="stepn">${n}</span>${title}</h3>${on?body:'<div class="note">Escolha a etapa anterior primeiro.</div>'}</div>`;
@@ -478,13 +765,13 @@ function marcar(){
     ${step(4,'Horário',times,!!k.day)}
     <div class="panel row between">
       <div>${ready?`<b>${esc(fmtDay(k.day))}, ${k.time}</b><div class="note">${esc(SV(k.service).name)} · ${money(SV(k.service).price)} · ${k.barber==='any'?'primeiro barbeiro livre':'com '+esc(B(k.barber).name)}</div>`:'<span class="note">Escolha serviço, barbeiro, dia e horário.</span>'}
-        <div class="note">Marcando como ${esc(S.client.name)} · ${esc(S.client.phone)}</div></div>
+        ${MODE==='cliente'?`<div class="form" style="margin-top:10px;padding:10px"><label>Seu nome<input id="clName" autocomplete="name" maxlength="60" value="${esc(S.client.name)}"></label><label>Seu WhatsApp<input id="clPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="(32) 99999-9999" value="${esc(S.client.phone)}"></label></div>`:''}</div>
       <button class="primary" data-act="bkConfirm" ${ready?'':'disabled'}>Confirmar horário</button>
     </div>
   </div>`;
 }
 function meus(){
-  const mine=S.appts.filter(a=>a.client===S.client.name);
+  const mine=S.appts.filter(a=>a.client&&a.client===S.client.name);
   const up=mine.filter(a=>a.status==='agendado'&&a.date>=today).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
   const past=mine.filter(a=>a.status!=='agendado').sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   return `<div class="stack">${clientBar()}
@@ -493,7 +780,7 @@ function meus(){
       <div class="who"><b>${esc(fmtDay(a.date))}</b><div>${esc(SV(a.serviceId).name)} · ${money(a.price)} · com ${esc(B(a.barberId).name)}</div></div>
       <div class="acts"><button class="small ghost" data-act="cancel" data-id="${a.id}">Cancelar</button></div></div>`).join(''):'<div class="empty">Nenhum horário marcado.</div>'}</div></div>
     <div class="panel"><h3>Histórico</h3><div class="list">${past.length?past.map(a=>`<div class="appt"><div class="time">${parse(a.date).getDate()}/${pad(parse(a.date).getMonth()+1)}</div>
-      <div class="who"><b>${esc(SV(a.serviceId).name)}</b><span class="status s-${a.status}">${a.status==='atendido'?'feito':'faltou'}</span><div>com ${esc(B(a.barberId).name)} · ${money(a.price)}</div></div><div></div></div>`).join(''):'<div class="empty">Ainda sem visitas.</div>'}</div></div>
+      <div class="who"><b>${esc(SV(a.serviceId).name)}</b><span class="status s-${a.status}">${a.status==='atendido'?'feito':'faltou'}</span><div>com ${esc(B(a.barberId).name)} · ${money(a.price)}</div></div><div></div></div>`).join(''):'<div class="empty">Seus horários marcados por este celular aparecem aqui.</div>'}</div></div>
   </div>`;
 }
 function clube(){
@@ -510,7 +797,7 @@ function clube(){
       <div class="row between"><div><h3 style="margin:0">${esc(S.club.plan)}</h3><div class="pay">${money(S.club.price)}<span class="note"> /mês</span></div></div>
         ${S.client.member?'<button data-act="join">Sair do plano</button>':'<button class="primary" data-act="join">Quero assinar</button>'}</div>
       <ul class="perks"><li>Cortes ilimitados no mês</li><li>Horário reservado com prioridade</li><li>10% de desconto em produtos</li><li>Selos em dobro no cartão</li></ul>
-      <div class="note">No app real, o pagamento seria mensal no Pix ou no cartão.</div>
+      <div class="note">A assinatura é combinada direto com a barbearia pelo WhatsApp.</div>
     </div>
   </div>`;
 }
@@ -531,11 +818,15 @@ const AUTOS=[
   ['after','Pós-atendimento','Quando o barbeiro marca “atendido”: pede nota e mostra os selos do clube.',()=>msgAfter({client:'Pedro',serviceId:S.services[0].id,barberId:S.barbers[0].id})],
   ['away','Cliente sumido','Quem não volta há mais de 30 dias recebe um convite para marcar.',()=>msgAway('Pedro')]];
 function whats(){
+  if(!S.services.length||!S.barbers.length) return `<div class="stack"><h2>WhatsApp</h2><div class="panel empty">Cadastre pelo menos um barbeiro e um serviço em “Equipe e preços”.</div></div>`;
+  return whats0().replace('<div class="stack">','<div class="stack"><div class="rolebar">O envio automático pelo WhatsApp ainda não está ligado. Por enquanto as mensagens ficam registradas aqui. Para avisar um cliente agora, use o botão de lembrete na Agenda.</div>');
+}
+function whats0(){
   const month=S.msgs.filter(m=>m.at.slice(0,7)===today.slice(0,7)).length;
   const shown=S.msgs.filter(m=>!ui.logF||ui.logF==='all'||(m.aud||'cliente')===ui.logF);
   return `<div class="stack">
-    <div class="row between"><div><h2>WhatsApp automático</h2><div class="note">${month} mensage${month===1?'m':'ns'} enviada${month===1?'':'s'} este mês · nesta demonstração o envio é simulado</div></div>
-      <button class="primary small" data-act="simulate">Rodar envios de hoje</button></div>
+    <div class="row between"><div><h2>WhatsApp automático</h2><div class="note">${month} mensage${month===1?'m':'ns'} registrada${month===1?'':'s'} este mês · nesta demonstração o envio é simulado</div></div>
+      <button class="primary small" data-act="simulate">Gerar mensagens de hoje</button></div>
     ${GROUPS.map(([g,gt,gd])=>{
       const items=(g==='cliente'?AUTOS.map(([k,t,w,f])=>[k,'cliente',t,w,f]):AUTOS2.filter(x=>x[1]===g));
       return `<section class="stack" style="gap:10px"><div><h3 style="margin:0">${gt}</h3><div class="note">${gd}</div></div>
@@ -639,6 +930,11 @@ function ajustes(){
   return `
   <div class="stack">
     <div><h2>Equipe e preços</h2><div class="note">As mudanças valem para os próximos cálculos do fechamento.</div></div>
+    <div class="panel stack">
+      <div><b>Link de agendamento para clientes</b><div class="note">Mande para os clientes ou coloque na bio do Instagram. Eles marcam sem precisar de conta.</div></div>
+      <div class="linkbox">${esc(APP_URL+'?b='+ME.shopId)}</div>
+      <div class="row"><button class="primary" data-g="shareLink">Divulgar no WhatsApp</button><button data-g="copyLink">Copiar link</button></div>
+    </div>
     <div class="panel form" style="background:var(--surface)"><label>Nome da barbearia<input id="shopIn" value="${esc(S.shop)}"></label>
       <label>WhatsApp do dono (recebe os resumos)<input id="ownerPhone" value="${esc(S.owner.phone)}"></label></div>
     <div class="panel row between">
@@ -647,9 +943,9 @@ function ajustes(){
     </div>
     <div class="panel">
       <h3>Barbeiros e comissão</h3>
-      <div class="tablewrap"><table><thead><tr><th>Nome</th><th>WhatsApp</th><th class="num">Comissão em serviços</th></tr></thead><tbody>
-        ${S.barbers.map(b=>`<tr><td>${esc(b.name)}</td><td><input style="width:150px" data-edit="phone" data-id="${b.id}" value="${esc(b.phone||'')}" aria-label="WhatsApp de ${esc(b.name)}"></td><td class="num"><input type="number" min="0" max="100" style="width:80px" data-edit="com" data-id="${b.id}" value="${b.com}" aria-label="Comissão de ${esc(b.name)}"> %</td></tr>`).join('')}
-        <tr><td colspan="2">Comissão em produtos (todos)</td><td class="num"><input type="number" min="0" max="100" style="width:80px" id="prodCom" value="${S.prodCom}"> %</td></tr>
+      <div class="tablewrap"><table><thead><tr><th>Nome</th><th>WhatsApp</th><th class="num">Comissão em serviços</th><th>Acesso ao app</th></tr></thead><tbody>
+        ${S.barbers.map(b=>`<tr><td>${esc(b.name)}</td><td><input style="width:150px" data-edit="phone" data-id="${b.id}" value="${esc(b.phone||'')}" aria-label="WhatsApp de ${esc(b.name)}"></td><td class="num"><input type="number" min="0" max="100" style="width:80px" data-edit="com" data-id="${b.id}" value="${b.com}" aria-label="Comissão de ${esc(b.name)}"> %</td><td>${b.linked?'<span class="status s-atendido">conta ligada</span>':b.invite?`<span class="code">${esc(b.invite)}</span> <button class="small" data-g="sendInvite" data-id="${b.id}">Enviar</button>`:`<button class="small" data-g="newInvite" data-id="${b.id}">Gerar convite</button>`}</td></tr>`).join('')}
+        <tr><td colspan="2">Comissão em produtos (todos)</td><td class="num"><input type="number" min="0" max="100" style="width:80px" id="prodCom" value="${S.prodCom}"> %</td><td></td></tr>
       </tbody></table></div>
       <form class="form" id="barberForm" style="margin-top:12px">
         <label>Novo barbeiro<input id="nbName" required placeholder="Nome"></label>
@@ -669,15 +965,10 @@ function ajustes(){
       </form>
     </div>
     <div class="panel row between">
-      <div><b>Backup dos dados</b><div class="note">Os dados ficam guardados neste aparelho. Salve um backup de vez em quando para não perder nada ao trocar de celular ou limpar o navegador.</div></div>
+      <div><b>Cópia dos dados</b><div class="note">Tudo fica salvo na nuvem e aparece em qualquer celular em que você entrar. Se quiser, baixe uma cópia para guardar.</div></div>
       <div class="row">
-        <button class="primary" data-act="exportData">Salvar backup</button>
-        <button data-act="importData">Restaurar backup</button>
+        <button data-act="exportData">Baixar cópia</button>
       </div>
-    </div>
-    <div class="panel row between">
-      <div><b>Dados de exemplo</b><div class="note">Apaga tudo e volta para os dados fictícios de demonstração.</div></div>
-      <button data-act="reset" class="${ui.resetArm?'primary':''}">${ui.resetArm?'Toque de novo para confirmar':'Recomeçar com dados de exemplo'}</button>
     </div>
   </div>`;
 }
@@ -688,7 +979,6 @@ const TABS={dono:[['agenda','Agenda'],['fechamento','Fechamento do mês'],['what
   barbeiro:[['agenda','Minha agenda'],['clientes','Meus clientes'],['meumes','Meu mês']],
   cliente:[['marcar','Marcar horário'],['meus','Meus horários'],['clube','Clube']]};
 const tabKey=()=>ui.role==='dono'||ui.role==='cliente'?ui.role:'barbeiro';
-const roleSel=document.getElementById('roleSel'), roleSelM=document.getElementById('roleSelM');
 const ICON={
   agenda:'<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>',
   fechamento:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
@@ -701,16 +991,13 @@ const ICON={
   meus:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   clube:'<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>'};
 function render(){
-  if(ui.role!=='dono'&&ui.role!=='cliente'&&!S.barbers.some(b=>b.id===ui.role)) ui.role='dono';
+  if(!ui.ready) return; ui.pendingRender=false;
   document.getElementById('shopName').textContent=S.shop;
-  const opts=`<option value="dono">Dono</option>`+S.barbers.map(b=>`<option value="${b.id}">${esc(b.name)} (barbeiro)</option>`).join('')+`<option value="cliente">Cliente</option>`;
-  [roleSel,roleSelM].forEach(s=>{s.innerHTML=opts;s.value=ui.role});
   const tabs=TABS[tabKey()];
   if(!tabs.some(t=>t[0]===ui.tab)) ui.tab=tabs[0][0];
   document.getElementById('tabs').innerHTML=tabs.map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${k===ui.tab}"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]||''}</svg>${l}</button>`).join('');
   app.innerHTML=({agenda,fechamento,estoque,ajustes,meumes,whats,marcar,meus,clube,clientes})[ui.tab]();
 }
-[roleSel,roleSelM].forEach(s=>s.addEventListener('change',()=>{ui.role=s.value;ui.barber=ui.role==='dono'||ui.role==='cliente'?'all':ui.role;ui.bkDone=null;ui.addOpen=false;ui.resetArm=false;ui.compose=null;ui.cSel=new Set();render();window.scrollTo(0,0)}));
 document.getElementById('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;ui.tab=b.dataset.tab;ui.resetArm=false;render();window.scrollTo(0,0)});
 app.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]'); if(!t) return; const act=t.dataset.act;
@@ -718,12 +1005,13 @@ app.addEventListener('click',e=>{
   else if(act==='barber'){ui.barber=t.dataset.b;render()}
   else if(act==='toggleAdd'){ui.addOpen=!ui.addOpen;render();if(ui.addOpen){const c=document.getElementById('fClient');c&&c.focus()}}
   else if(act==='st'){const a=S.appts.find(x=>x.id===t.dataset.id);a.status=t.dataset.s;
-    if(a.status==='atendido'&&S.auto.after){logMsg('Pós-atendimento',a.client,a.phone,msgAfter(a));save();render();toast('Mensagem de pós-atendimento enviada para '+a.client);return}
+    if(a.status==='atendido'&&S.auto.after){logMsg('Pós-atendimento',a.client,a.phone,msgAfter(a));save();render();toast('Atendido. Mensagem de pós-atendimento registrada para '+a.client);return}
     save();render()}
   else if(act==='go'){ui.tab=t.dataset.t;ui.bkDone=null;render();window.scrollTo(0,0)}
   else if(act==='bk'){const k=t.dataset.k;ui.bk[k]=t.dataset.v;
     if(k==='barber'||k==='day') delete ui.bk.time;
     render()}
+  else if(act==='bkConfirm'&&MODE==='cliente'){clientBook()}
   else if(act==='bkConfirm'){const k=ui.bk;let b=k.barber;
     if(b==='any'){const f=S.barbers.find(x=>!taken(k.day,k.time,x.id));if(!f){toast('Esse horário acabou de ser ocupado');delete k.time;render();return}b=f.id}
     if(taken(k.day,k.time,b)){toast('Esse horário acabou de ser ocupado');delete k.time;render();return}
@@ -731,7 +1019,10 @@ app.addEventListener('click',e=>{
     S.appts.push(a);if(S.auto.confirm)logMsg('Confirmação',a.client,a.phone,msgConfirm(a));notifyBarber(a,false);
     ui.bk={};ui.bkDone=a.id;save();render();window.scrollTo(0,0)}
   else if(act==='bkNew'){ui.bkDone=null;ui.bk={};render()}
+  else if(act==='cancel'&&MODE==='cliente'){if(confirmArm(t,'Toque de novo para cancelar'))clientCancel(t.dataset.id)}
   else if(act==='cancel'){const a=S.appts.find(x=>x.id===t.dataset.id);S.appts=S.appts.filter(x=>x.id!==a.id);notifyBarber(a,true);save();render();toast('Horário cancelado. O horário voltou a ficar livre.')}
+  else if(act==='join'&&MODE==='cliente'){const ph=String(S.owner.phone||'').replace(/\D/g,'');if(!ph){toast('Fale com a barbearia para assinar o clube');return}
+    window.open('https://wa.me/'+(ph.length<=11?'55':'')+ph+'?text='+encodeURIComponent('Olá! Quero assinar o '+S.club.plan+' da '+S.shop+'.'),'_blank')}
   else if(act==='join'){S.client.member=!S.client.member;save();render();toast(S.client.member?'Bem-vindo ao clube!':'Você saiu do plano')}
   else if(act==='clearLog'){S.msgs=[];save();render()}
   else if(act==='logF'){ui.logF=t.dataset.f;render()}
@@ -744,7 +1035,7 @@ app.addEventListener('click',e=>{
   else if(act==='tpl'){ui.compose.text=TPL.find(x=>x[0]===t.dataset.t)[2];render()}
   else if(act==='sendCompose'){const me=B(ui.role);const map=Object.fromEntries(clientsOf(ui.role).map(c=>[c.name,c]));let n=0;
     ui.compose.to.forEach(name=>{const c=map[name];if(!c||c.off)return;logMsg('Mensagem de '+me.name,c.name,c.phone,fill(ui.compose.text,c,me),'cliente');n++});
-    ui.compose=null;ui.cSel=new Set();save();render();toast(n+' mensage'+(n===1?'m enviada':'ns enviadas')+' pelo WhatsApp da barbearia')}
+    ui.compose=null;ui.cSel=new Set();save();render();toast(n+' mensage'+(n===1?'m registrada':'ns registradas'))}
   else if(act==='simulate'){let n=0;const tm=iso(new Date(Date.now()+864e5));
     if(S.auto.remind) S.appts.filter(a=>a.date===tm&&a.status==='agendado').forEach(a=>{logMsg('Lembrete',a.client,a.phone,reminderText(a));n++});
     if(S.auto.away){const last={};S.appts.filter(a=>a.status==='atendido').forEach(a=>{if(!last[a.client]||a.date>last[a.client].date)last[a.client]=a});
@@ -753,7 +1044,7 @@ app.addEventListener('click',e=>{
     if(S.auto.ownerDaily){logMsg('Resumo do dia',S.owner.name,S.owner.phone,msgOwnerDaily(today),'dono');n++}
     if(S.auto.ownerMonth){const first=today.slice(8)==='01';const pm=new Date();pm.setDate(0);
       logMsg(first?'Fechamento do mês':'Fechamento parcial',S.owner.name,S.owner.phone,closeText(first?iso(pm).slice(0,7):today.slice(0,7)),'dono');n++}
-    save();render();toast(n?n+' mensagens enviadas (simulação)':'Nenhuma mensagem para enviar hoje com as automações ligadas')}
+    save();render();toast(n?n+' mensagens registradas':'Nenhuma mensagem para enviar hoje com as automações ligadas')}
   else if(act==='remind'){const a=S.appts.find(x=>x.id===t.dataset.id);share('Lembrete para '+a.client,reminderText(a))}
   else if(act==='remindAll'){const w=S.appts.filter(a=>a.date===ui.day&&a.status==='agendado'&&(ui.barber==='all'||a.barberId===ui.barber)).sort((a,b)=>a.time.localeCompare(b.time));
     share('Lembretes do dia',w.map(a=>`${a.time} · ${a.client} ${a.phone||''}\n${reminderText(a)}`).join('\n\n———\n\n'))}
@@ -798,6 +1089,8 @@ app.addEventListener('change',e=>{
   else if(t.dataset.edit==='price'){SV(t.dataset.id).price=Math.max(0,Number(t.value)||0);save()}
 });
 app.addEventListener('input',e=>{
+  if(e.target.id==='clName'){S.client.name=e.target.value;return}
+  if(e.target.id==='clPhone'){S.client.phone=e.target.value;return}
   if(e.target.id!=='composeText'||!ui.compose) return;
   ui.compose.text=e.target.value;
   const c=clientsOf(ui.role).find(x=>x.name===ui.compose.to[0])||{name:'',ago:0};
@@ -809,11 +1102,11 @@ app.addEventListener('submit',e=>{
   if(f.id==='addForm'){const sv=SV(v('fService'));const na={id:uid(),date:ui.day,time:v('fTime'),client:v('fClient'),phone:v('fPhone'),barberId:v('fBarber'),serviceId:sv.id,price:sv.price,status:'agendado'};S.appts.push(na);
     if(S.auto.confirm&&na.phone)logMsg('Confirmação',na.client,na.phone,msgConfirm(na));if(ui.role==='dono')notifyBarber(na,false);ui.addOpen=false;save();render();toast('Horário marcado')}
   else if(f.id==='prodForm'){S.products.push({id:uid(),name:v('pName'),qty:Number(v('pQty'))||0,min:Number(v('pMin'))||0,price:Number(v('pPrice'))||0});save();render();toast('Produto adicionado')}
-  else if(f.id==='barberForm'){S.barbers.push({id:uid(),name:v('nbName'),com:Number(v('nbCom'))||0});save();render();toast('Barbeiro adicionado')}
+  else if(f.id==='barberForm'){S.barbers.push({id:uid(),name:v('nbName'),com:Number(v('nbCom'))||0,phone:'',invite:codeGen()});save();render();toast('Barbeiro adicionado. Envie o código de convite para ele entrar no app.')}
   else if(f.id==='serviceForm'){S.services.push({id:uid(),name:v('nsName'),price:Number(v('nsPrice'))||0});save();render();toast('Serviço adicionado')}
 });
 document.getElementById('modalRoot').addEventListener('click',e=>{if(e.target.classList.contains('modal'))e.currentTarget.innerHTML=''});
-render();
+boot();
 })();
 </script>
 
