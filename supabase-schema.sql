@@ -124,7 +124,7 @@ alter table public.messages enable row level security;
 drop policy if exists shops_select on public.shops;
 drop policy if exists shops_insert on public.shops;
 drop policy if exists shops_update on public.shops;
-create policy shops_select on public.shops for select to authenticated using (public.is_member(id));
+create policy shops_select on public.shops for select to authenticated using (owner_id = auth.uid() or public.is_member(id));
 create policy shops_insert on public.shops for insert to authenticated with check (owner_id = auth.uid());
 create policy shops_update on public.shops for update to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 

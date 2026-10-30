@@ -179,6 +179,8 @@ body.solo .side{display:none} body.solo .shell{display:block}
 .linkbox{font-size:13px;word-break:break-all;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 #outM{display:none}
 @media (max-width:899px){#outM:not([hidden]){display:inline-block}}
+a.btn{display:inline-block;text-decoration:none;white-space:nowrap} a.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} a.btn.small{padding:6px 10px;font-size:13px}
+.wa-done{opacity:.6}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
@@ -544,6 +546,21 @@ function share(title,text){
   try{navigator.clipboard.writeText(text).then(done,fallback)}catch(e){fallback()}
 }
 
+/* ---------- WHATSAPP COM UM TOQUE (gratuito, abre o WhatsApp com a mensagem pronta) ---------- */
+const waNum=p=>{let d=String(p||'').replace(/\D/g,'');if(!d)return '';if(d.length<=11)d='55'+d;return d};
+const waHref=(p,t)=>'https://wa.me/'+waNum(p)+'?text='+encodeURIComponent(t);
+function waModal(title,items,note){
+  const m=document.getElementById('modalRoot');
+  m.innerHTML=`<div class="modal"><div class="panel" style="max-height:85vh;overflow:auto">
+    <div class="row between"><h3 style="margin:0">${esc(title)}</h3><button class="small ghost" data-wa-close>Fechar</button></div>
+    <p class="note">${esc(note||'Toque em “Enviar” para abrir o WhatsApp com a mensagem pronta. Depois é só tocar no botão de enviar de lá.')}</p>
+    <div class="list">${items.length?items.map((x,i)=>`<div class="sent"><div class="row between"><b>${esc(x.to)}</b>${waNum(x.phone)?`<a class="btn primary small" target="_blank" rel="noopener" data-wa-i="${i}" href="${waHref(x.phone,x.text)}">Enviar</a>`:'<span class="note">sem telefone cadastrado</span>'}</div><div class="bubble">${esc(x.text)}</div></div>`).join(''):'<div class="empty">Nada para enviar agora.</div>'}</div>
+  </div></div>`;
+  m.querySelector('[data-wa-close]').onclick=()=>{m.innerHTML='';if(ui.pendingRender)render()};
+  m.querySelectorAll('[data-wa-i]').forEach(a=>a.addEventListener('click',()=>{a.textContent='Aberto ✓';a.classList.remove('primary');a.closest('.sent').classList.add('wa-done')}));
+}
+const newMsgs=n=>S.msgs.slice(0,n).reverse().map(m=>({to:m.kind+' · '+m.to,phone:m.phone,text:m.text}));
+
 /* ---------- AGENDA ---------- */
 function agenda(){
   const me=ui.role!=='dono'?B(ui.role):null;
@@ -725,7 +742,7 @@ function msgBarberDaily(b,day){const l=S.appts.filter(a=>a.date===day&&a.barberI
 function msgOwnerDaily(day){const ap=S.appts.filter(a=>a.date===day);const done=ap.filter(a=>a.status==='atendido');const miss=ap.filter(a=>a.status==='faltou');
   const sales=S.sales.filter(s=>s.date===day).reduce((t,s)=>t+s.price*s.qty,0);const tm=iso(new Date(parse(day).getTime()+864e5));
   return `Resumo de ${fmtDay(day)} · ${S.shop}\n\nFaturamento: ${money(done.reduce((t,a)=>t+a.price,0)+sales)}\nAtendimentos: ${done.length}\nFaltas: ${miss.length} (${money(miss.reduce((t,a)=>t+a.price,0))} perdidos)\n\n${S.barbers.map(b=>`${b.name}: ${done.filter(a=>a.barberId===b.id).length} atend.`).join('\n')}\n\nAmanhã: ${S.appts.filter(a=>a.date===tm&&a.status==='agendado').length} horários marcados.`}
-function logMsg(kind,to,phone,text,aud){S.msgs.unshift({id:uid(),at:new Date().toISOString(),kind,to,phone:phone||'',text,aud:aud||'cliente'});S.msgs=S.msgs.slice(0,80)}
+function logMsg(kind,to,phone,text,aud){logMsg.n=(logMsg.n||0)+1;S.msgs.unshift({id:uid(),at:new Date().toISOString(),kind,to,phone:phone||'',text,aud:aud||'cliente'});S.msgs=S.msgs.slice(0,80)}
 function notifyBarber(a,cancel){if(!S.auto.barberNew)return;const b=B(a.barberId);if(!b.id)return;logMsg(cancel?'Cancelamento':'Novo horário',b.name,b.phone,msgBarberNew(a,cancel),'barbeiro')}
 
 /* ---------- CLIENTE ---------- */
@@ -819,7 +836,7 @@ const AUTOS=[
   ['away','Cliente sumido','Quem não volta há mais de 30 dias recebe um convite para marcar.',()=>msgAway('Pedro')]];
 function whats(){
   if(!S.services.length||!S.barbers.length) return `<div class="stack"><h2>WhatsApp</h2><div class="panel empty">Cadastre pelo menos um barbeiro e um serviço em “Equipe e preços”.</div></div>`;
-  return whats0().replace('<div class="stack">','<div class="stack"><div class="rolebar">O envio automático pelo WhatsApp ainda não está ligado. Por enquanto as mensagens ficam registradas aqui. Para avisar um cliente agora, use o botão de lembrete na Agenda.</div>');
+  return whats0().replace('<div class="stack">','<div class="stack"><div class="rolebar">Envio com um toque: o app prepara cada mensagem e abre o WhatsApp da barbearia com o texto pronto. É só tocar em enviar. Grátis, pelo seu próprio WhatsApp.</div>');
 }
 function whats0(){
   const month=S.msgs.filter(m=>m.at.slice(0,7)===today.slice(0,7)).length;
@@ -837,7 +854,7 @@ function whats0(){
     <div class="panel"><div class="row between"><h3 style="margin:0">Enviadas</h3>
         <div class="row"><div class="chips">${[['all','Todas'],['cliente','Clientes'],['barbeiro','Barbeiros'],['dono','Dono']].map(([k,l])=>`<button class="chip" data-act="logF" data-f="${k}" aria-pressed="${(ui.logF||'all')===k}">${l}</button>`).join('')}</div>
         ${S.msgs.length?'<button class="small ghost" data-act="clearLog">Limpar</button>':''}</div></div>
-      <div class="list">${shown.length?shown.map(m=>`<div class="sent"><div class="note"><span class="aud aud-${m.aud||'cliente'}">${({cliente:'Cliente',barbeiro:'Barbeiro',dono:'Dono'})[m.aud||'cliente']}</span> <b>${esc(m.kind)}</b> · para ${esc(m.to)} ${esc(m.phone)} · ${new Date(m.at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div><div class="bubble">${esc(m.text)}</div></div>`).join(''):'<div class="empty">Nada enviado ainda. Marque um horário na visão do cliente, marque um atendimento como “atendido” ou toque em “Rodar envios de hoje”.</div>'}</div></div>
+      <div class="list">${shown.length?shown.map(m=>`<div class="sent"><div class="note"><span class="aud aud-${m.aud||'cliente'}">${({cliente:'Cliente',barbeiro:'Barbeiro',dono:'Dono'})[m.aud||'cliente']}</span> <b>${esc(m.kind)}</b> · para ${esc(m.to)} ${esc(m.phone)} · ${new Date(m.at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div><div class="bubble">${esc(m.text)}</div>${waNum(m.phone)?`<div><a class="btn small" target="_blank" rel="noopener" href="${waHref(m.phone,m.text)}">Enviar no WhatsApp</a></div>`:''}</div>`).join(''):'<div class="empty">Nada por aqui ainda. As mensagens aparecem quando você marca um horário, marca um atendimento como “atendido” ou toca em “Gerar mensagens de hoje”.</div>'}</div></div>
   </div>`;
 }
 
@@ -1005,7 +1022,7 @@ app.addEventListener('click',e=>{
   else if(act==='barber'){ui.barber=t.dataset.b;render()}
   else if(act==='toggleAdd'){ui.addOpen=!ui.addOpen;render();if(ui.addOpen){const c=document.getElementById('fClient');c&&c.focus()}}
   else if(act==='st'){const a=S.appts.find(x=>x.id===t.dataset.id);a.status=t.dataset.s;
-    if(a.status==='atendido'&&S.auto.after){logMsg('Pós-atendimento',a.client,a.phone,msgAfter(a));save();render();toast('Atendido. Mensagem de pós-atendimento registrada para '+a.client);return}
+    if(a.status==='atendido'&&S.auto.after){logMsg('Pós-atendimento',a.client,a.phone,msgAfter(a));save();render();waModal('Pós-atendimento',newMsgs(1));return}
     save();render()}
   else if(act==='go'){ui.tab=t.dataset.t;ui.bkDone=null;render();window.scrollTo(0,0)}
   else if(act==='bk'){const k=t.dataset.k;ui.bk[k]=t.dataset.v;
@@ -1035,7 +1052,7 @@ app.addEventListener('click',e=>{
   else if(act==='tpl'){ui.compose.text=TPL.find(x=>x[0]===t.dataset.t)[2];render()}
   else if(act==='sendCompose'){const me=B(ui.role);const map=Object.fromEntries(clientsOf(ui.role).map(c=>[c.name,c]));let n=0;
     ui.compose.to.forEach(name=>{const c=map[name];if(!c||c.off)return;logMsg('Mensagem de '+me.name,c.name,c.phone,fill(ui.compose.text,c,me),'cliente');n++});
-    ui.compose=null;ui.cSel=new Set();save();render();toast(n+' mensage'+(n===1?'m registrada':'ns registradas'))}
+    ui.compose=null;ui.cSel=new Set();save();render();waModal('Mensagens para os seus clientes',newMsgs(n))}
   else if(act==='simulate'){let n=0;const tm=iso(new Date(Date.now()+864e5));
     if(S.auto.remind) S.appts.filter(a=>a.date===tm&&a.status==='agendado').forEach(a=>{logMsg('Lembrete',a.client,a.phone,reminderText(a));n++});
     if(S.auto.away){const last={};S.appts.filter(a=>a.status==='atendido').forEach(a=>{if(!last[a.client]||a.date>last[a.client].date)last[a.client]=a});
@@ -1044,10 +1061,10 @@ app.addEventListener('click',e=>{
     if(S.auto.ownerDaily){logMsg('Resumo do dia',S.owner.name,S.owner.phone,msgOwnerDaily(today),'dono');n++}
     if(S.auto.ownerMonth){const first=today.slice(8)==='01';const pm=new Date();pm.setDate(0);
       logMsg(first?'Fechamento do mês':'Fechamento parcial',S.owner.name,S.owner.phone,closeText(first?iso(pm).slice(0,7):today.slice(0,7)),'dono');n++}
-    save();render();toast(n?n+' mensagens registradas':'Nenhuma mensagem para enviar hoje com as automações ligadas')}
-  else if(act==='remind'){const a=S.appts.find(x=>x.id===t.dataset.id);share('Lembrete para '+a.client,reminderText(a))}
+    save();render();if(n){waModal('Mensagens de hoje',newMsgs(n));return}toast(n?n+' mensagens registradas':'Nenhuma mensagem para enviar hoje com as automações ligadas')}
+  else if(act==='remind'){const a=S.appts.find(x=>x.id===t.dataset.id);if(waNum(a.phone))window.open(waHref(a.phone,reminderText(a)),'_blank');else share('Lembrete para '+a.client,reminderText(a))}
   else if(act==='remindAll'){const w=S.appts.filter(a=>a.date===ui.day&&a.status==='agendado'&&(ui.barber==='all'||a.barberId===ui.barber)).sort((a,b)=>a.time.localeCompare(b.time));
-    share('Lembretes do dia',w.map(a=>`${a.time} · ${a.client} ${a.phone||''}\n${reminderText(a)}`).join('\n\n———\n\n'))}
+    waModal('Lembretes do dia',w.map(a=>({to:a.time+' · '+a.client,phone:a.phone,text:reminderText(a)})))}
   else if(act==='copyClose'){share('Fechamento do mês',closeText())}
   else if(act==='sell'){const p=S.products.find(x=>x.id===t.dataset.id);if(p.qty<1)return;p.qty--;S.sales.push({id:uid(),date:today,productId:p.id,qty:1,price:p.price,barberId:ui.saleBy});save();render();toast(p.name+' vendido por '+B(ui.saleBy).name)}
   else if(act==='restock'){const p=S.products.find(x=>x.id===t.dataset.id);p.qty++;save();render()}
@@ -1100,7 +1117,8 @@ app.addEventListener('input',e=>{
 app.addEventListener('submit',e=>{
   e.preventDefault(); const f=e.target; const v=id=>document.getElementById(id).value.trim();
   if(f.id==='addForm'){const sv=SV(v('fService'));const na={id:uid(),date:ui.day,time:v('fTime'),client:v('fClient'),phone:v('fPhone'),barberId:v('fBarber'),serviceId:sv.id,price:sv.price,status:'agendado'};S.appts.push(na);
-    if(S.auto.confirm&&na.phone)logMsg('Confirmação',na.client,na.phone,msgConfirm(na));if(ui.role==='dono')notifyBarber(na,false);ui.addOpen=false;save();render();toast('Horário marcado')}
+    const n0=logMsg.n||0;if(S.auto.confirm&&na.phone)logMsg('Confirmação',na.client,na.phone,msgConfirm(na));if(ui.role==='dono')notifyBarber(na,false);ui.addOpen=false;save();render();
+    const nm=newMsgs((logMsg.n||0)-n0).filter(x=>waNum(x.phone));if(nm.length)waModal('Horário marcado: avisar pelo WhatsApp',nm);else toast('Horário marcado')}
   else if(f.id==='prodForm'){S.products.push({id:uid(),name:v('pName'),qty:Number(v('pQty'))||0,min:Number(v('pMin'))||0,price:Number(v('pPrice'))||0});save();render();toast('Produto adicionado')}
   else if(f.id==='barberForm'){S.barbers.push({id:uid(),name:v('nbName'),com:Number(v('nbCom'))||0,phone:'',invite:codeGen()});save();render();toast('Barbeiro adicionado. Envie o código de convite para ele entrar no app.')}
   else if(f.id==='serviceForm'){S.services.push({id:uid(),name:v('nsName'),price:Number(v('nsPrice'))||0});save();render();toast('Serviço adicionado')}
