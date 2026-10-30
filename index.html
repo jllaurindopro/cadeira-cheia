@@ -179,6 +179,8 @@ body.solo .side{display:none} body.solo .shell{display:block}
 .linkbox{font-size:13px;word-break:break-all;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 #outM{display:none}
 @media (max-width:899px){#outM:not([hidden]){display:inline-block}}
+.hrs{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.hrs input{width:118px;padding:6px 8px}.hrs span{color:var(--muted);font-size:13px}
+tr[data-hrow] td,tr[data-hrow]+tr td{white-space:normal}
 a.btn{display:inline-block;text-decoration:none;white-space:nowrap} a.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} a.btn.small{padding:6px 10px;font-size:13px}
 .wa-done{opacity:.6}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -255,12 +257,15 @@ const MODE=SHOP_LINK?'cliente':'equipe';
 const APP_URL=location.origin+location.pathname;
 const empty=()=>({shop:'',barbers:[],services:[],appts:[],products:[],sales:[],msgs:[],prodCom:10,client:{name:'',phone:'',member:false},club:{every:10,plan:'Clube',price:99},auto:{},owner:{name:'Dono',phone:''},optout:[],showPhones:false});
 let S=empty();
+const DEF_HOURS={days:{0:null,1:['09:00','19:00'],2:['09:00','19:00'],3:['09:00','19:00'],4:['09:00','19:00'],5:['09:00','19:00'],6:['09:00','17:00']},lunch:null,closed:[],step:30};
 function normalize(){
   S.owner=Object.assign({name:'Dono',phone:''},S.owner||{});
   S.auto=Object.assign({confirm:true,remind:true,after:true,away:true,barberNew:true,barberDaily:true,ownerDaily:true,ownerMonth:true},S.auto||{});
   S.club=Object.assign({every:10,plan:'Clube',price:99},S.club||{});
   S.msgs=S.msgs||[]; if(S.showPhones===undefined)S.showPhones=false; S.optout=S.optout||[]; if(S.prodCom===undefined)S.prodCom=10;
   S.client=S.client||{name:'',phone:'',member:false};
+  S.hours=S.hours&&S.hours.days?S.hours:JSON.parse(JSON.stringify(DEF_HOURS)); S.hours.closed=S.hours.closed||[]; S.hours.step=Number(S.hours.step)||30;
+  S.blocks=S.blocks||[];
 }
 const ME={user:null,email:'',shopId:null,owner:false,barberId:null};
 const CL={visits:0,ids:[]};
@@ -270,11 +275,14 @@ const T={
     to:b=>({id:b.id,name:b.name,phone:b.phone||'',com:num(b.com),invite:b.invite||null}),
     from:r=>({id:r.id,name:r.name,phone:r.phone||'',com:num(r.com),invite:r.invite||null,linked:!!r.user_id})},
   services:{key:'services',mod:q=>q.order('created_at').order('id'),
-    to:s=>({id:s.id,name:s.name,price:num(s.price)}),
-    from:r=>({id:r.id,name:r.name,price:num(r.price)})},
+    to:s=>({id:s.id,name:s.name,price:num(s.price),duration:Math.round(num(s.duration))||30}),
+    from:r=>({id:r.id,name:r.name,price:num(r.price),duration:num(r.duration)||30})},
+  blocks:{key:'blocks',mod:q=>q.gte('date',iso(new Date(Date.now()-60*864e5))).order('date').order('id'),
+    to:k=>({id:k.id,date:k.date,start_t:k.start,end_t:k.end,barber_id:k.barberId,note:k.note||''}),
+    from:r=>({id:r.id,date:r.date,start:r.start_t,end:r.end_t,barberId:r.barber_id,note:r.note||''})},
   appointments:{key:'appts',mod:q=>q.gte('date',iso(new Date(Date.now()-400*864e5))).order('date').order('id'),
-    to:a=>({id:a.id,date:a.date,time:a.time,barber_id:a.barberId,service_id:a.serviceId,price:num(a.price),client:a.client||'',phone:a.phone||'',status:a.status||'agendado'}),
-    from:r=>({id:r.id,date:r.date,time:r.time,barberId:r.barber_id,serviceId:r.service_id,price:num(r.price),client:r.client||'',phone:r.phone||'',status:r.status,source:r.source})},
+    to:a=>({id:a.id,date:a.date,time:a.time,barber_id:a.barberId,service_id:a.serviceId,price:num(a.price),client:a.client||'',phone:a.phone||'',status:a.status||'agendado',duration:Math.round(num(a.duration))||30}),
+    from:r=>({id:r.id,date:r.date,time:r.time,barberId:r.barber_id,serviceId:r.service_id,price:num(r.price),client:r.client||'',phone:r.phone||'',status:r.status,source:r.source,duration:num(r.duration)||30})},
   products:{key:'products',mod:q=>q.order('created_at').order('id'),
     to:p=>({id:p.id,name:p.name,qty:Math.round(num(p.qty)),min:Math.round(num(p.min)),price:num(p.price)}),
     from:r=>({id:r.id,name:r.name,qty:num(r.qty),min:num(r.min),price:num(r.price)})},
@@ -285,7 +293,7 @@ const T={
     to:m=>({id:m.id,at:m.at,kind:m.kind||'',to:m.to||'',phone:m.phone||'',text:m.text||'',aud:m.aud||'cliente'}),
     from:r=>({id:r.id,at:r.at,kind:r.kind,to:r.to,phone:r.phone,text:r.text,aud:r.aud})}
 };
-const settingsOf=()=>({owner:S.owner,auto:S.auto,club:S.club,prodCom:S.prodCom,optout:S.optout,showPhones:S.showPhones});
+const settingsOf=()=>({hours:S.hours,owner:S.owner,auto:S.auto,club:S.club,prodCom:S.prodCom,optout:S.optout,showPhones:S.showPhones});
 const shopJSON=()=>JSON.stringify({name:S.shop,settings:settingsOf()});
 const snap={};
 const rowsMap=t=>new Map(S[T[t].key].map(x=>[x.id,JSON.stringify(T[t].to(x))]));
@@ -301,7 +309,7 @@ async function fetchAll(t){
 async function loadShop(){
   const {data,error}=await sb.from('shops').select('*').eq('id',ME.shopId).single(); if(error) throw error;
   const st=data.settings||{}; S.shop=data.name;
-  S.owner=st.owner; S.auto=st.auto; S.club=st.club; S.prodCom=st.prodCom; S.optout=st.optout; S.showPhones=st.showPhones;
+  S.hours=st.hours; S.owner=st.owner; S.auto=st.auto; S.club=st.club; S.prodCom=st.prodCom; S.optout=st.optout; S.showPhones=st.showPhones;
   normalize(); snap.shop=shopJSON();
 }
 async function loadTable(t){
@@ -311,7 +319,7 @@ async function loadTable(t){
 }
 async function loadAll(){
   await loadShop();
-  await Promise.all(['barbers','services','appointments','products','sales','messages'].map(loadTable));
+  await Promise.all(['barbers','services','appointments','products','sales','messages','blocks'].map(loadTable));
   if(!S.barbers.some(b=>b.id===ui.saleBy)) ui.saleBy=S.barbers[0]?S.barbers[0].id:'';
 }
 
@@ -320,7 +328,7 @@ const save=()=>{if(MODE!=='equipe'||!ME.shopId) return; clearTimeout(flushT); fl
 async function flush(){
   if(flushing){again=true;return} flushing=true; let failed=false;
   try{
-    const tables=ME.owner?['barbers','services','products','appointments','sales','messages']:['appointments','messages'];
+    const tables=ME.owner?['barbers','services','products','appointments','sales','messages','blocks']:['appointments','messages','blocks'];
     for(const t of tables){
       const cur=rowsMap(t), old=snap[t]||new Map();
       const up=[]; cur.forEach((v,id)=>{if(old.get(id)!==v) up.push(Object.assign(JSON.parse(v),{shop_id:ME.shopId}))});
@@ -347,7 +355,7 @@ async function reloadTable(t){
 }
 function subscribe(){
   const ch=sb.channel('loja-'+ME.shopId);
-  ['appointments','barbers','services','products','sales'].forEach(t=>ch.on('postgres_changes',{event:'*',schema:'public',table:t,filter:'shop_id=eq.'+ME.shopId},()=>queueReload(t)));
+  ['appointments','barbers','services','products','sales','blocks'].forEach(t=>ch.on('postgres_changes',{event:'*',schema:'public',table:t,filter:'shop_id=eq.'+ME.shopId},()=>queueReload(t)));
   ch.on('postgres_changes',{event:'UPDATE',schema:'public',table:'shops',filter:'id=eq.'+ME.shopId},()=>queueReload('shops'));
   ch.subscribe();
 }
@@ -474,8 +482,8 @@ async function clientRefresh(){
   const {data,error}=await sb.rpc('public_shop',{p_shop:SHOP_LINK});
   if(error||!data) throw new Error('link');
   S.shop=data.name; S.barbers=(data.barbers||[]).map(b=>({id:b.id,name:b.name,com:0,phone:''})); S.services=data.services||[];
-  S.club=data.club||{}; S.owner={name:'',phone:data.ownerPhone||''}; normalize(); S.auto.confirm=false;
-  const busy=(data.busy||[]).map((x,i)=>({id:'busy-'+i,date:x.date,time:x.time,barberId:x.barberId,status:'agendado',client:'',phone:'',price:0}));
+  S.club=data.club||{}; S.owner={name:'',phone:data.ownerPhone||''}; S.hours=data.hours; S.blocks=(data.blocks||[]).map((k,i)=>({id:'k'+i,date:k.date,start:k.start,end:k.end,barberId:k.barberId})); normalize(); S.auto.confirm=false;
+  const busy=(data.busy||[]).map((x,i)=>({id:'busy-'+i,date:x.date,time:x.time,barberId:x.barberId,status:'agendado',client:'',phone:'',price:0,duration:num(x.duration)||30}));
   let mine=[];
   if(CL.ids.length&&S.client.phone){const r=await sb.rpc('client_appts',{p_shop:SHOP_LINK,p_ids:CL.ids,p_phone:S.client.phone});
     if(!r.error&&r.data){mine=(r.data.appts||[]).map(a=>Object.assign(a,{price:num(a.price),client:S.client.name,phone:S.client.phone}));CL.visits=num(r.data.visits)}}
@@ -576,7 +584,7 @@ function agenda(){
              :`<div class="kpi bad"><b>${money(sum(miss))}</b><span>perdidos com ${miss.length} falta${miss.length===1?'':'s'}</span></div>`;
   return `
   <div class="stack">
-    ${me?`<div class="rolebar">Você está vendo como ${esc(me.name)}: só a sua agenda, os seus clientes e a sua comissão.</div>`:''}
+    ${me?`<div class="rolebar">Olá, ${esc(me.name)}! Aqui aparecem só a sua agenda, os seus clientes e a sua comissão.</div>`:''}
     <div class="row between">
       <div><h2>${esc(label)}</h2><div class="note">${ui.day===today?esc(fmtDay(ui.day)):''}</div></div>
       <div class="row">
@@ -599,23 +607,49 @@ function agenda(){
         </div>`}
         <div class="row">
           ${wait.length?`<button class="small" data-act="remindAll">Lembretes do dia</button>`:''}
+          <button class="small" data-act="toggleBlock">${ui.blockOpen?'Fechar':'Bloquear horário'}</button>
           <button class="primary small" data-act="toggleAdd">${ui.addOpen?'Fechar':'+ Novo horário'}</button>
         </div>
       </div>
+      ${ui.blockOpen?blockForm():''}
       ${ui.addOpen?addForm():''}
+      ${dayHours(ui.day)?'':`<div class="lostline">${(S.hours.closed||[]).includes(ui.day)?'Barbearia fechada neste dia (feriado ou folga cadastrada).':'A barbearia não abre neste dia da semana.'} O link de agendamento não oferece horários.</div>`}
       <div class="list">
+        ${blocksOn(ui.day,me?ui.role:ui.barber).map(blockRow).join('')}
         ${list.length?list.map(row).join(''):`<div class="empty">Nenhum horário ${ui.barber==='all'?'neste dia':'para este barbeiro'}. Toque em “+ Novo horário” para marcar.</div>`}
       </div>
     </div>
   </div>`;
 }
+function blockForm(){
+  const mine=ui.role!=='dono';
+  const opts=mine?`<option value="${ui.role}">${esc(B(ui.role).name)}</option>`
+    :`<option value="all">Barbearia toda</option>`+S.barbers.map(b=>`<option value="${b.id}" ${ui.barber===b.id?'selected':''}>${esc(b.name)}</option>`).join('');
+  return `<form class="form" id="blockForm">
+    <label>Quem<select id="kBarber">${opts}</select></label>
+    <label>De<input type="date" id="kFrom" required value="${ui.day}"></label>
+    <label>Até<input type="date" id="kTo" required value="${ui.day}"></label>
+    <label class="opt" style="flex-direction:row;align-items:center;gap:8px;align-self:center"><input type="checkbox" id="kAll" checked style="width:auto"> Dia inteiro</label>
+    <label>Das<input type="time" id="kStart" value="12:00" step="900"></label>
+    <label>Às<input type="time" id="kEnd" value="13:00" step="900"></label>
+    <label>Motivo<input id="kNote" maxlength="60" placeholder="Folga, médico, curso…"></label>
+    <button class="primary" type="submit">Bloquear</button>
+  </form>`;
+}
+function blockRow(k){
+  const can=ui.role==='dono'||k.barberId===ui.role;
+  return `<div class="appt" style="opacity:.85"><div class="time">${k.start}</div>
+    <div class="who"><b>${k.barberId==='all'?'Barbearia toda':esc(B(k.barberId).name)}</b><span class="status s-faltou">bloqueado</span>
+      <div>até ${k.end}${k.note?' · '+esc(k.note):''}</div></div>
+    <div class="acts">${can?`<button class="small ghost" data-act="unblock" data-id="${k.id}">Desbloquear</button>`:''}</div></div>`;
+}
 function addForm(){
   return `<form class="form" id="addForm">
-    <label>Hora<input type="time" id="fTime" required value="14:00"></label>
+    <label>Hora<input type="time" id="fTime" required value="${(slotsFor(ui.day,ui.barber!=='all'?ui.barber:(S.barbers[0]||{}).id,30)[0])||'14:00'}" step="900"></label>
     <label>Cliente<input id="fClient" required placeholder="Nome"></label>
     <label>WhatsApp<input id="fPhone" placeholder="(32) 9...."></label>
     <label>Barbeiro<select id="fBarber">${S.barbers.filter(b=>ui.role==='dono'||b.id===ui.role).map(b=>`<option value="${b.id}" ${ui.barber===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label>
-    <label>Serviço<select id="fService">${S.services.map(s=>`<option value="${s.id}">${esc(s.name)} · ${money(s.price)}</option>`).join('')}</select></label>
+    <label>Serviço<select id="fService">${S.services.map(s=>`<option value="${s.id}">${esc(s.name)} · ${money(s.price)} · ${durOf(s)} min</option>`).join('')}</select></label>
     <button class="primary" type="submit">Marcar</button>
   </form>`;
 }
@@ -627,7 +661,7 @@ function row(a){
   return `<div class="appt">
     <div class="time">${a.time}</div>
     <div class="who"><b>${esc(a.client)}</b><span class="status s-${a.status}">${a.status}</span>
-      <div>${esc(sv.name)} · ${money(a.price)} · com ${esc(B(a.barberId).name)}</div></div>
+      <div>${esc(sv.name)} · ${money(a.price)} · até ${endOf(a)} · com ${esc(B(a.barberId).name)}</div></div>
     <div class="acts">${acts}</div>
   </div>`;
 }
@@ -702,7 +736,7 @@ function meumes(){
   const bySvc=S.services.map(s=>{const x=ap.filter(a=>a.serviceId===s.id&&a.status==='atendido');return {s,n:x.length,v:x.reduce((t,a)=>t+a.price,0)}}).filter(x=>x.n);
   return `
   <div class="stack">
-    <div class="rolebar">Você está vendo como ${esc(me.name)}: só a sua agenda, os seus clientes e a sua comissão.</div>
+    <div class="rolebar">Olá, ${esc(me.name)}! Aqui aparecem só a sua agenda, os seus clientes e a sua comissão.</div>
     <div class="row between">
       <div><h2>Meu mês · ${esc(D.label)}</h2><div class="note">Atualiza sozinho a cada atendimento marcado. É o mesmo cálculo que o dono vê no fechamento.</div></div>
       <input type="month" id="monthPick" value="${ui.month}">
@@ -747,14 +781,29 @@ function notifyBarber(a,cancel){if(!S.auto.barberNew)return;const b=B(a.barberId
 
 /* ---------- CLIENTE ---------- */
 const nowMin=()=>{const d=new Date();return d.getHours()*60+d.getMinutes()};
-const taken=(day,t,b)=>S.appts.some(a=>a.date===day&&a.time===t&&a.barberId===b&&a.status!=='faltou');
-function slotsFor(day,barber){
-  const out=[];for(let h=9;h<19;h++)for(const m of [0,30]){const t=pad(h)+':'+pad(m);
-    if(day===today&&h*60+m<=nowMin()+20) continue;
-    if(barber==='any'?S.barbers.some(b=>!taken(day,t,b.id)):!taken(day,t,barber)) out.push(t)}
+const hm=t=>{const p=String(t||'0:0').split(':');return Number(p[0])*60+(Number(p[1])||0)};
+const mh=n=>pad(Math.floor(n/60))+':'+pad(n%60);
+const durOf=a=>Number(a&&a.duration)||30;
+const endOf=a=>mh(hm(a.time)+durOf(a));
+const DOW_ORDER=[1,2,3,4,5,6,0];
+function dayHours(day){const H=S.hours;if((H.closed||[]).includes(day))return null;const d=(H.days||{})[parse(day).getDay()];return Array.isArray(d)&&d[0]&&d[1]?d:null}
+function blocksOn(day,b){return (S.blocks||[]).filter(k=>k.date===day&&(!b||b==='all'||k.barberId===b||k.barberId==='all'))}
+/* motivo de o horário não caber, ou '' se cabe */
+function why(day,t,b,dur,skipId){const dh=dayHours(day);if(!dh)return 'fechado';const s=hm(t),e=s+dur;
+  if(s<hm(dh[0])||e>hm(dh[1]))return 'fora do horário de funcionamento';
+  const L=S.hours.lunch;if(Array.isArray(L)&&s<hm(L[1])&&e>hm(L[0]))return 'horário de almoço';
+  if(blocksOn(day,b).some(k=>s<hm(k.end)&&e>hm(k.start)))return 'horário bloqueado';
+  if(S.appts.some(a=>a.id!==skipId&&a.date===day&&a.barberId===b&&a.status!=='faltou'&&s<hm(a.time)+durOf(a)&&e>hm(a.time)))return 'já tem cliente nesse horário';
+  return ''}
+const taken=(day,t,b,dur)=>!!why(day,t,b,dur||30);
+function slotsFor(day,barber,dur){
+  dur=dur||30;const dh=dayHours(day);if(!dh)return [];const step=Number(S.hours.step)||30;const out=[];
+  for(let m=hm(dh[0]);m+dur<=hm(dh[1]);m+=step){const t=mh(m);
+    if(day===today&&m<=nowMin()+20) continue;
+    if(barber==='any'?S.barbers.some(b=>!taken(day,t,b.id,dur)):!taken(day,t,barber,dur)) out.push(t)}
   return out;
 }
-function openDays(){const out=[];const d=new Date();while(out.length<7){if(d.getDay()!==0)out.push(iso(d));d.setDate(d.getDate()+1)}return out}
+function openDays(){const out=[];const d=new Date();for(let i=0;i<15&&out.length<7;i++){const dh=dayHours(iso(d));if(dh&&!(i===0&&nowMin()+20>=hm(dh[1])-15))out.push(iso(d));d.setDate(d.getDate()+1)}return out}
 function clientBar(){return ''}
 function marcar(){
   const k=ui.bk;
@@ -768,10 +817,10 @@ function marcar(){
       <div class="row" style="justify-content:center"><button data-act="go" data-t="meus">Ver meus horários</button><button class="primary" data-act="bkNew">Marcar outro</button></div>
     </div></div>`}
   const step=(n,title,body,on)=>`<div class="panel ${on?'':'off'}"><h3><span class="stepn">${n}</span>${title}</h3>${on?body:'<div class="note">Escolha a etapa anterior primeiro.</div>'}</div>`;
-  const svc=S.services.map(s=>`<button class="chip opt" data-act="bk" data-k="service" data-v="${s.id}" aria-pressed="${k.service===s.id}">${esc(s.name)} <span class="muted">${money(s.price)}</span></button>`).join('');
+  const svc=S.services.map(s=>`<button class="chip opt" data-act="bk" data-k="service" data-v="${s.id}" aria-pressed="${k.service===s.id}">${esc(s.name)} <span class="muted">${money(s.price)} · ${durOf(s)} min</span></button>`).join('');
   const bar=[`<button class="chip opt" data-act="bk" data-k="barber" data-v="any" aria-pressed="${k.barber==='any'}">Qualquer um</button>`].concat(S.barbers.map(b=>`<button class="chip opt" data-act="bk" data-k="barber" data-v="${b.id}" aria-pressed="${k.barber===b.id}">${esc(b.name)}</button>`)).join('');
   const days=openDays().map(d=>{const dt=parse(d);return `<button class="chip opt day" data-act="bk" data-k="day" data-v="${d}" aria-pressed="${k.day===d}"><small>${d===today?'hoje':DIAS[dt.getDay()].slice(0,3)}</small><b>${dt.getDate()}</b></button>`}).join('');
-  let times='';if(k.day&&k.barber){const sl=slotsFor(k.day,k.barber);
+  let times='';if(k.day&&k.barber){const sl=slotsFor(k.day,k.barber,durOf(SV(k.service)));
     times=sl.length?`<div class="slots">${sl.map(t=>`<button class="chip opt" data-act="bk" data-k="time" data-v="${t}" aria-pressed="${k.time===t}">${t}</button>`).join('')}</div>`:'<div class="note">Sem horários livres neste dia. Tente outro dia ou outro barbeiro.</div>'}
   const ready=k.service&&k.barber&&k.day&&k.time;
   return `<div class="stack">${clientBar()}
@@ -880,7 +929,7 @@ function clientes(){
   const targets=all.filter(c=>sel.has(c.name)&&!c.off);
   const cp=ui.compose;
   return `<div class="stack">
-    <div class="rolebar">Você está vendo como ${esc(me.name)}: só a sua agenda, os seus clientes e a sua comissão.</div>
+    <div class="rolebar">Olá, ${esc(me.name)}! Aqui aparecem só a sua agenda, os seus clientes e a sua comissão.</div>
     <div class="row between"><div><h2>Meus clientes</h2><div class="note">${all.length} clientes atendidos por você · as mensagens saem pelo WhatsApp da ${esc(S.shop)} com a sua assinatura</div></div>
       <button class="primary small" data-act="compose" ${targets.length?'':'disabled'}>Mensagem para ${targets.length} selecionado${targets.length===1?'':'s'}</button></div>
     ${cp?`<div class="panel stack compose">
@@ -952,6 +1001,20 @@ function ajustes(){
       <div class="linkbox">${esc(APP_URL+'?b='+ME.shopId)}</div>
       <div class="row"><button class="primary" data-g="shareLink">Divulgar no WhatsApp</button><button data-g="copyLink">Copiar link</button></div>
     </div>
+    <div class="panel stack">
+      <h3 style="margin:0">Horário de funcionamento</h3>
+      <div class="note">Os clientes só conseguem marcar dentro destes horários. Folgas e bloqueios de cada barbeiro ficam na Agenda, no botão “Bloquear horário”.</div>
+      <div class="tablewrap"><table><tbody>
+        ${DOW_ORDER.map(d=>{const v=S.hours.days[d];return `<tr data-hrow="${d}"><td><label class="opt" style="flex-direction:row;align-items:center;gap:8px;color:var(--ink)"><input type="checkbox" data-hday="${d}" data-hk="on" ${v?'checked':''} style="width:auto"> ${DIAS[d][0].toUpperCase()+DIAS[d].slice(1)}</label></td>
+          <td>${v?`<div class="hrs"><input type="time" step="900" data-hday="${d}" data-hk="from" value="${v[0]}" aria-label="Abre"><span>até</span><input type="time" step="900" data-hday="${d}" data-hk="to" value="${v[1]}" aria-label="Fecha"></div>`:`<span class="muted">fechado</span><input type="hidden" data-hk="from" value="09:00"><input type="hidden" data-hk="to" value="19:00">`}</td></tr>`}).join('')}
+        <tr><td><label class="opt" style="flex-direction:row;align-items:center;gap:8px;color:var(--ink)"><input type="checkbox" id="lunchOn" ${S.hours.lunch?'checked':''} style="width:auto"> Almoço</label></td>
+          <td>${S.hours.lunch?`<div class="hrs"><input type="time" step="900" id="lunchA" value="${S.hours.lunch[0]}" aria-label="Início do almoço"><span>até</span><input type="time" step="900" id="lunchZ" value="${S.hours.lunch[1]}" aria-label="Fim do almoço"></div>`:'<span class="muted">sem pausa</span><input type="hidden" id="lunchA" value="12:00"><input type="hidden" id="lunchZ" value="13:00">'}</td></tr>
+        <tr><td>Intervalo da agenda</td><td><select id="hStep">${[15,20,30,60].map(m=>`<option value="${m}" ${m===S.hours.step?'selected':''}>de ${m} em ${m} min</option>`).join('')}</select></td></tr>
+      </tbody></table></div>
+      <div><b>Dias fechados</b> <span class="note">(feriados, férias coletivas)</span></div>
+      <div class="chips">${S.hours.closed.filter(d=>d>=today).map(d=>`<span class="chip">${parse(d).getDate()}/${pad(parse(d).getMonth()+1)}/${parse(d).getFullYear()} <button class="small ghost" data-act="rmClosed" data-d="${d}" aria-label="Remover">×</button></span>`).join('')||'<span class="note">Nenhum.</span>'}</div>
+      <div class="row"><input type="date" id="closedIn" min="${today}" aria-label="Dia fechado"><button class="small" data-act="addClosed">Adicionar dia fechado</button></div>
+    </div>
     <div class="panel form" style="background:var(--surface)"><label>Nome da barbearia<input id="shopIn" value="${esc(S.shop)}"></label>
       <label>WhatsApp do dono (recebe os resumos)<input id="ownerPhone" value="${esc(S.owner.phone)}"></label></div>
     <div class="panel row between">
@@ -972,12 +1035,13 @@ function ajustes(){
     </div>
     <div class="panel">
       <h3>Serviços e preços</h3>
-      <div class="tablewrap"><table><thead><tr><th>Serviço</th><th class="num">Preço (R$)</th></tr></thead><tbody>
-        ${S.services.map(s=>`<tr><td>${esc(s.name)}</td><td class="num"><input type="number" min="0" step="1" style="width:90px" data-edit="price" data-id="${s.id}" value="${s.price}" aria-label="Preço de ${esc(s.name)}"></td></tr>`).join('')}
+      <div class="tablewrap"><table><thead><tr><th>Serviço</th><th class="num">Preço (R$)</th><th>Duração</th></tr></thead><tbody>
+        ${S.services.map(s=>`<tr><td>${esc(s.name)}</td><td class="num"><input type="number" min="0" step="1" style="width:90px" data-edit="price" data-id="${s.id}" value="${s.price}" aria-label="Preço de ${esc(s.name)}"></td><td><select data-edit="dur" data-id="${s.id}" aria-label="Duração de ${esc(s.name)}">${[15,20,30,40,45,60,75,90,120].concat([15,20,30,40,45,60,75,90,120].includes(durOf(s))?[]:[durOf(s)]).map(m=>`<option value="${m}" ${m===durOf(s)?'selected':''}>${m} min</option>`).join('')}</select></td></tr>`).join('')}
       </tbody></table></div>
       <form class="form" id="serviceForm" style="margin-top:12px">
         <label>Novo serviço<input id="nsName" required placeholder="Ex.: Platinado"></label>
         <label>Preço (R$)<input id="nsPrice" type="number" min="0" value="50" required></label>
+        <label>Duração<select id="nsDur">${[15,20,30,40,45,60,75,90,120].map(m=>`<option value="${m}" ${m===30?'selected':''}>${m} min</option>`).join('')}</select></label>
         <button type="submit">Adicionar</button>
       </form>
     </div>
@@ -1020,7 +1084,11 @@ app.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]'); if(!t) return; const act=t.dataset.act;
   if(act==='day'){const d=parse(ui.day);d.setDate(d.getDate()+Number(t.dataset.d));ui.day=iso(d);render()}
   else if(act==='barber'){ui.barber=t.dataset.b;render()}
-  else if(act==='toggleAdd'){ui.addOpen=!ui.addOpen;render();if(ui.addOpen){const c=document.getElementById('fClient');c&&c.focus()}}
+  else if(act==='toggleBlock'){ui.blockOpen=!ui.blockOpen;ui.addOpen=false;render()}
+  else if(act==='unblock'){if(!confirmArm(t,'Toque de novo'))return;S.blocks=S.blocks.filter(k=>k.id!==t.dataset.id);save();render();toast('Horário liberado')}
+  else if(act==='addClosed'){const i=document.getElementById('closedIn');if(!i||!i.value)return;if(!S.hours.closed.includes(i.value))S.hours.closed.push(i.value);S.hours.closed.sort();save();render();toast('Dia fechado adicionado')}
+  else if(act==='rmClosed'){S.hours.closed=S.hours.closed.filter(d=>d!==t.dataset.d);save();render()}
+  else if(act==='toggleAdd'){ui.blockOpen=false;ui.addOpen=!ui.addOpen;render();if(ui.addOpen){const c=document.getElementById('fClient');c&&c.focus()}}
   else if(act==='st'){const a=S.appts.find(x=>x.id===t.dataset.id);a.status=t.dataset.s;
     if(a.status==='atendido'&&S.auto.after){logMsg('Pós-atendimento',a.client,a.phone,msgAfter(a));save();render();waModal('Pós-atendimento',newMsgs(1));return}
     save();render()}
@@ -1030,8 +1098,8 @@ app.addEventListener('click',e=>{
     render()}
   else if(act==='bkConfirm'&&MODE==='cliente'){clientBook()}
   else if(act==='bkConfirm'){const k=ui.bk;let b=k.barber;
-    if(b==='any'){const f=S.barbers.find(x=>!taken(k.day,k.time,x.id));if(!f){toast('Esse horário acabou de ser ocupado');delete k.time;render();return}b=f.id}
-    if(taken(k.day,k.time,b)){toast('Esse horário acabou de ser ocupado');delete k.time;render();return}
+    const kd=durOf(SV(k.service));if(b==='any'){const f=S.barbers.find(x=>!taken(k.day,k.time,x.id,kd));if(!f){toast('Esse horário acabou de ser ocupado');delete k.time;render();return}b=f.id}
+    if(taken(k.day,k.time,b,kd)){toast('Esse horário acabou de ser ocupado');delete k.time;render();return}
     const sv=SV(k.service);const a={id:uid(),date:k.day,time:k.time,client:S.client.name,phone:S.client.phone,barberId:b,serviceId:sv.id,price:sv.price,status:'agendado'};
     S.appts.push(a);if(S.auto.confirm)logMsg('Confirmação',a.client,a.phone,msgConfirm(a));notifyBarber(a,false);
     ui.bk={};ui.bkDone=a.id;save();render();window.scrollTo(0,0)}
@@ -1103,6 +1171,15 @@ app.addEventListener('change',e=>{
   else if(t.id==='ownerPhone'){S.owner.phone=t.value.trim();save()}
   else if(t.dataset.edit==='phone'){B(t.dataset.id).phone=t.value.trim();save()}
   else if(t.dataset.edit==='com'){B(t.dataset.id).com=Math.max(0,Math.min(100,Number(t.value)||0));save()}
+  else if(t.dataset.edit==='dur'){SV(t.dataset.id).duration=Number(t.value)||30;save();toast('Duração atualizada')}
+  else if(t.dataset.hday!==undefined){const d=t.dataset.hday, row=app.querySelector(`[data-hrow="${d}"]`);
+    const on=row.querySelector('[data-hk=on]').checked, a=row.querySelector('[data-hk=from]').value, z=row.querySelector('[data-hk=to]').value;
+    if(on&&a&&z&&hm(z)<=hm(a)){toast('O horário de fechar precisa ser depois do de abrir');return}
+    S.hours.days[d]=on?[a||'09:00',z||'19:00']:null;save();if(t.dataset.hk==='on')render()}
+  else if(t.id==='lunchOn'||t.id==='lunchA'||t.id==='lunchZ'){const on=document.getElementById('lunchOn').checked,a=document.getElementById('lunchA').value,z=document.getElementById('lunchZ').value;
+    if(on&&a&&z&&hm(z)<=hm(a)){toast('O fim do almoço precisa ser depois do início');return}
+    S.hours.lunch=on?[a||'12:00',z||'13:00']:null;save();if(t.id==='lunchOn')render()}
+  else if(t.id==='hStep'){S.hours.step=Number(t.value)||30;save()}
   else if(t.dataset.edit==='price'){SV(t.dataset.id).price=Math.max(0,Number(t.value)||0);save()}
 });
 app.addEventListener('input',e=>{
@@ -1116,12 +1193,22 @@ app.addEventListener('input',e=>{
 });
 app.addEventListener('submit',e=>{
   e.preventDefault(); const f=e.target; const v=id=>document.getElementById(id).value.trim();
-  if(f.id==='addForm'){const sv=SV(v('fService'));const na={id:uid(),date:ui.day,time:v('fTime'),client:v('fClient'),phone:v('fPhone'),barberId:v('fBarber'),serviceId:sv.id,price:sv.price,status:'agendado'};S.appts.push(na);
+  if(f.id==='addForm'){const sv=SV(v('fService'));const na={id:uid(),date:ui.day,time:v('fTime'),client:v('fClient'),phone:v('fPhone'),barberId:v('fBarber'),serviceId:sv.id,price:sv.price,duration:durOf(sv),status:'agendado'};
+    const w=why(na.date,na.time,na.barberId,na.duration);const sb=f.querySelector('button[type=submit]');
+    if(w&&!f.dataset.force){f.dataset.force='1';sb.textContent='Encaixar mesmo assim';toast('Atenção: '+w+'. Toque de novo para encaixar.');return}
+    if(S.appts.some(a=>a.date===na.date&&a.time===na.time&&a.barberId===na.barberId&&a.status!=='faltou')){toast('Já existe um cliente começando exatamente nesse horário com esse barbeiro.');return}
+    S.appts.push(na);
     const n0=logMsg.n||0;if(S.auto.confirm&&na.phone)logMsg('Confirmação',na.client,na.phone,msgConfirm(na));if(ui.role==='dono')notifyBarber(na,false);ui.addOpen=false;save();render();
     const nm=newMsgs((logMsg.n||0)-n0).filter(x=>waNum(x.phone));if(nm.length)waModal('Horário marcado: avisar pelo WhatsApp',nm);else toast('Horário marcado')}
   else if(f.id==='prodForm'){S.products.push({id:uid(),name:v('pName'),qty:Number(v('pQty'))||0,min:Number(v('pMin'))||0,price:Number(v('pPrice'))||0});save();render();toast('Produto adicionado')}
   else if(f.id==='barberForm'){S.barbers.push({id:uid(),name:v('nbName'),com:Number(v('nbCom'))||0,phone:'',invite:codeGen()});save();render();toast('Barbeiro adicionado. Envie o código de convite para ele entrar no app.')}
-  else if(f.id==='serviceForm'){S.services.push({id:uid(),name:v('nsName'),price:Number(v('nsPrice'))||0});save();render();toast('Serviço adicionado')}
+  else if(f.id==='blockForm'){const all=document.getElementById('kAll').checked;let a=v('kFrom'),z=v('kTo');if(!a)return;if(!z||z<a)z=a;
+    const st=all?'00:00':v('kStart'),en=all?'23:59':v('kEnd');if(!all&&hm(en)<=hm(st)){toast('O fim precisa ser depois do início');return}
+    const days=[];for(let d=parse(a);iso(d)<=z&&days.length<62;d.setDate(d.getDate()+1))days.push(iso(d));
+    days.forEach(d=>S.blocks.push({id:uid(),date:d,start:st,end:en,barberId:v('kBarber'),note:v('kNote')}));
+    const clash=S.appts.filter(x=>x.status==='agendado'&&days.includes(x.date)&&(v('kBarber')==='all'||x.barberId===v('kBarber'))&&hm(x.time)<hm(en)&&hm(x.time)+durOf(x)>hm(st)).length;
+    ui.blockOpen=false;save();render();toast(days.length+(days.length===1?' dia bloqueado':' dias bloqueados')+(clash?'. Atenção: '+clash+' cliente'+(clash===1?' já marcado':'s já marcados')+' nesse período.':''))}
+  else if(f.id==='serviceForm'){S.services.push({id:uid(),name:v('nsName'),price:Number(v('nsPrice'))||0,duration:Number(v('nsDur'))||30});save();render();toast('Serviço adicionado')}
 });
 document.getElementById('modalRoot').addEventListener('click',e=>{if(e.target.classList.contains('modal'))e.currentTarget.innerHTML=''});
 boot();

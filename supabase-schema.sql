@@ -281,3 +281,154 @@ do $$ begin
   begin alter publication supabase_realtime add table public.products; exception when others then null; end;
   begin alter publication supabase_realtime add table public.shops; exception when others then null; end;
 end $$;
+-- Cadeira Cheia v3: horário de funcionamento, bloqueios/folgas e duração dos serviços
+
+alter table public.services add column if not exists duration integer not null default 30 check (duration between 5 and 480);
+alter table public.appointments add column if not exists duration integer not null default 30 check (duration between 5 and 480);
+
+create table if not exists public.blocks (
+  id text primary key,
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  barber_id text not null,            -- 'all' = barbearia inteira
+  date text not null check (date ~ '^\d{4}-\d{2}-\d{2}$'),
+  start_t text not null check (start_t ~ '^\d{2}:\d{2}$'),
+  end_t text not null check (end_t ~ '^\d{2}:\d{2}$'),
+  note text not null default '',
+  created_at timestamptz not null default now()
+);
+create index if not exists blocks_shop_date on public.blocks (shop_id, date);
+alter table public.blocks enable row level security;
+drop policy if exists blocks_select on public.blocks;
+drop policy if exists blocks_owner on public.blocks;
+drop policy if exists blocks_barber on public.blocks;
+create policy blocks_select on public.blocks for select to authenticated using (public.is_member(shop_id));
+create policy blocks_owner on public.blocks for all to authenticated using (public.is_owner(shop_id)) with check (public.is_owner(shop_id));
+create policy blocks_barber on public.blocks for all to authenticated
+  using (barber_id = public.my_barber_id(shop_id)) with check (barber_id = public.my_barber_id(shop_id));
+do $$ begin begin alter publication supabase_realtime add table public.blocks; exception when others then null; end; end $$;
+
+-- 'HH:MM' -> minutos
+create or replace function public.hm(t text) returns integer language sql immutable as $$
+  select split_part(t, ':', 1)::int * 60 + split_part(t, ':', 2)::int;
+$$;
+
+-- Horário padrão quando o dono ainda não configurou: seg-sex 9h-19h, sáb 9h-17h, domingo fechado
+create or replace function public.shop_hours(p_shop uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(settings -> 'hours',
+    '{"days":{"0":null,"1":["09:00","19:00"],"2":["09:00","19:00"],"3":["09:00","19:00"],"4":["09:00","19:00"],"5":["09:00","19:00"],"6":["09:00","17:00"]},"lunch":null,"closed":[]}'::jsonb)
+  from shops where id = p_shop;
+$$;
+
+-- O horário cabe? (funcionamento, almoço, dia fechado, bloqueios e outros clientes)
+create or replace function public.slot_ok(p_shop uuid, p_date text, p_time text, p_barber text, p_dur int) returns boolean
+language plpgsql stable security definer set search_path = public as $$
+declare
+  h jsonb := public.shop_hours(p_shop);
+  d jsonb; s int := public.hm(p_time); e int := public.hm(p_time) + p_dur;
+begin
+  if h -> 'closed' ? p_date then return false; end if;
+  d := h -> 'days' -> extract(dow from p_date::date)::int::text;
+  if d is null or jsonb_typeof(d) <> 'array' then return false; end if;
+  if s < public.hm(d ->> 0) or e > public.hm(d ->> 1) then return false; end if;
+  if jsonb_typeof(h -> 'lunch') = 'array'
+     and s < public.hm(h -> 'lunch' ->> 1) and e > public.hm(h -> 'lunch' ->> 0) then return false; end if;
+  if exists (select 1 from blocks b where b.shop_id = p_shop and b.date = p_date and b.barber_id in (p_barber, 'all')
+              and s < public.hm(b.end_t) and e > public.hm(b.start_t)) then return false; end if;
+  if exists (select 1 from appointments a where a.shop_id = p_shop and a.date = p_date and a.barber_id = p_barber
+              and a.status <> 'faltou' and s < public.hm(a.time) + a.duration and e > public.hm(a.time)) then return false; end if;
+  return true;
+end $$;
+
+-- Dados do link público: agora com horários, bloqueios e duração
+create or replace function public.public_shop(p_shop uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with lim as (select to_char((now() at time zone 'America/Sao_Paulo')::date, 'YYYY-MM-DD') d0,
+                      to_char((now() at time zone 'America/Sao_Paulo')::date + 15, 'YYYY-MM-DD') d1)
+  select jsonb_build_object(
+    'id', s.id,
+    'name', s.name,
+    'club', coalesce(s.settings -> 'club', '{"every":10,"plan":"Clube","price":99}'::jsonb),
+    'ownerPhone', coalesce(s.settings #>> '{owner,phone}', ''),
+    'hours', public.shop_hours(s.id),
+    'barbers', coalesce((select jsonb_agg(jsonb_build_object('id', b.id, 'name', b.name) order by b.created_at)
+                          from barbers b where b.shop_id = s.id), '[]'::jsonb),
+    'services', coalesce((select jsonb_agg(jsonb_build_object('id', v.id, 'name', v.name, 'price', v.price, 'duration', v.duration) order by v.created_at)
+                          from services v where v.shop_id = s.id), '[]'::jsonb),
+    'busy', coalesce((select jsonb_agg(jsonb_build_object('date', a.date, 'time', a.time, 'barberId', a.barber_id, 'duration', a.duration))
+                          from appointments a, lim
+                         where a.shop_id = s.id and a.status <> 'faltou' and a.date between lim.d0 and lim.d1), '[]'::jsonb),
+    'blocks', coalesce((select jsonb_agg(jsonb_build_object('date', k.date, 'start', k.start_t, 'end', k.end_t, 'barberId', k.barber_id))
+                          from blocks k, lim where k.shop_id = s.id and k.date between lim.d0 and lim.d1), '[]'::jsonb)
+  ) from shops s where s.id = p_shop;
+$$;
+
+-- Agendamento pelo link: valida tudo no servidor
+create or replace function public.book(p_shop uuid, p_date text, p_time text, p_barber text, p_service text,
+                                       p_client text, p_phone text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_now timestamp := now() at time zone 'America/Sao_Paulo';
+  v_today date := v_now::date;
+  v_price numeric; v_dur int; v_barber text := p_barber; v_id text;
+begin
+  if p_date !~ '^\d{4}-\d{2}-\d{2}$' or p_time !~ '^\d{2}:\d{2}$' then raise exception 'data_invalida'; end if;
+  if p_date::date < v_today or p_date::date > v_today + 15 then raise exception 'data_invalida'; end if;
+  if p_date::date = v_today and public.hm(p_time) <= extract(hour from v_now)::int * 60 + extract(minute from v_now)::int then raise exception 'data_invalida'; end if;
+  if length(trim(coalesce(p_client,''))) < 2 or length(p_client) > 60 then raise exception 'nome_invalido'; end if;
+  if length(regexp_replace(coalesce(p_phone,''), '\D', '', 'g')) < 10 or length(p_phone) > 25 then raise exception 'telefone_invalido'; end if;
+  select price, duration into v_price, v_dur from services where id = p_service and shop_id = p_shop;
+  if v_price is null then raise exception 'servico_invalido'; end if;
+  if (select count(*) from appointments where shop_id = p_shop and status = 'agendado' and date >= to_char(v_today,'YYYY-MM-DD')
+        and regexp_replace(phone,'\D','','g') = regexp_replace(p_phone,'\D','','g')) >= 3 then
+    raise exception 'limite_horarios';
+  end if;
+  -- um agendamento por vez por barbearia e dia, para não haver encaixe duplo
+  perform pg_advisory_xact_lock(hashtext(p_shop::text || p_date));
+  if v_barber = 'any' then
+    select b.id into v_barber from barbers b
+     where b.shop_id = p_shop and public.slot_ok(p_shop, p_date, p_time, b.id, v_dur)
+     order by random() limit 1;
+    if v_barber is null then raise exception 'horario_ocupado'; end if;
+  else
+    if not exists (select 1 from barbers where id = v_barber and shop_id = p_shop) then raise exception 'barbeiro_invalido'; end if;
+    if not public.slot_ok(p_shop, p_date, p_time, v_barber, v_dur) then raise exception 'horario_ocupado'; end if;
+  end if;
+  v_id := substr(md5(random()::text || clock_timestamp()::text), 1, 10);
+  begin
+    insert into appointments (id, shop_id, date, time, barber_id, service_id, price, duration, client, phone, status, source)
+    values (v_id, p_shop, p_date, p_time, v_barber, p_service, v_price, v_dur, trim(p_client), trim(p_phone), 'agendado', 'link');
+  exception when unique_violation then raise exception 'horario_ocupado';
+  end;
+  return jsonb_build_object('id', v_id, 'barberId', v_barber, 'price', v_price, 'duration', v_dur);
+end $$;
+
+create or replace function public.client_appts(p_shop uuid, p_ids text[], p_phone text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with digits as (select regexp_replace(coalesce(p_phone,''),'\D','','g') d)
+  select jsonb_build_object(
+    'appts', coalesce((select jsonb_agg(jsonb_build_object('id',a.id,'date',a.date,'time',a.time,'barberId',a.barber_id,
+                                 'serviceId',a.service_id,'price',a.price,'status',a.status,'duration',a.duration))
+                         from appointments a, digits
+                        where a.shop_id = p_shop and a.id = any(p_ids)
+                          and regexp_replace(a.phone,'\D','','g') = digits.d and length(digits.d) >= 10), '[]'::jsonb),
+    'visits', (select count(*) from appointments a, digits
+                where a.shop_id = p_shop and a.status = 'atendido' and length(digits.d) >= 10
+                  and regexp_replace(a.phone,'\D','','g') = digits.d
+                  and exists (select 1 from appointments x where x.shop_id = p_shop and x.id = any(p_ids)
+                                and regexp_replace(x.phone,'\D','','g') = digits.d))
+  );
+$$;
+
+revoke all on function public.slot_ok(uuid,text,text,text,int) from public;
+revoke all on function public.shop_hours(uuid) from public;
+grant execute on function public.slot_ok(uuid,text,text,text,int) to authenticated;
+grant execute on function public.shop_hours(uuid) to authenticated;
+grant execute on function public.hm(text) to anon, authenticated;
+revoke all on function public.public_shop(uuid) from public;
+revoke all on function public.book(uuid,text,text,text,text,text,text) from public;
+revoke all on function public.client_appts(uuid,text[],text) from public;
+grant execute on function public.public_shop(uuid) to anon, authenticated;
+grant execute on function public.book(uuid,text,text,text,text,text,text) to anon, authenticated;
+grant execute on function public.client_appts(uuid,text[],text) to anon, authenticated;
+select 'ok' as resultado;
