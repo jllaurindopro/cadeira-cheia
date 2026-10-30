@@ -615,8 +615,7 @@ function agenda(){
       ${ui.addOpen?addForm():''}
       ${dayHours(ui.day)?'':`<div class="lostline">${(S.hours.closed||[]).includes(ui.day)?'Barbearia fechada neste dia (feriado ou folga cadastrada).':'A barbearia não abre neste dia da semana.'} O link de agendamento não oferece horários.</div>`}
       <div class="list">
-        ${blocksOn(ui.day,me?ui.role:ui.barber).map(blockRow).join('')}
-        ${list.length?list.map(row).join(''):`<div class="empty">Nenhum horário ${ui.barber==='all'?'neste dia':'para este barbeiro'}. Toque em “+ Novo horário” para marcar.</div>`}
+        ${list.length||blocksOn(ui.day,me?ui.role:ui.barber).length?[...blocksOn(ui.day,me?ui.role:ui.barber).map(k=>[k.start+'0',blockRow(k)]),...list.map(a=>[a.time+'1',row(a)])].sort((x,y)=>x[0].localeCompare(y[0])).map(x=>x[1]).join(''):`<div class="empty">Nenhum horário ${ui.barber==='all'?'neste dia':'para este barbeiro'}. Toque em “+ Novo horário” para marcar.</div>`}
       </div>
     </div>
   </div>`;

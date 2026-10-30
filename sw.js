@@ -1,6 +1,6 @@
 // Service worker do Cadeira Cheia: guarda o app no aparelho para abrir sem internet.
 // Ao publicar uma versão nova do app, troque o número abaixo (v1 -> v2) para os celulares baixarem a atualização.
-const VERSION = 'cadeira-cheia-v4';
+const VERSION = 'cadeira-cheia-v5';
 const SHELL = [
   './',
   './index.html',
