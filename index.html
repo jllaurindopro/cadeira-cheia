@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cadeira Cheia</title>
+<meta name="description" content="Agenda, fechamento do mês, WhatsApp e estoque da barbearia.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161b21" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Cadeira Cheia">
+<style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: SaaS shell. Desktop: fixed 248px sidebar (brand, nav, view switcher) + content column (max 1040px).
+   Phone: sidebar becomes a sticky top bar with horizontally scrolling tabs. */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --sunk:#f0f2f5; --ink:#161b22; --muted:#626b78; --line:#e3e6eb; --line-strong:#cfd4dc;
+  --accent:#0f6a52; --accent-soft:#e3f1ec; --accent-ink:#ffffff; --brass:#9a7020;
+  --ok:#17784a; --ok-bg:#e2f3ea; --bad:#b4401b; --bad-bg:#fbe9e2; --wait:#35589a; --wait-bg:#e7edf8;
+  --shadow:0 1px 2px rgba(16,24,40,.05);
+  --display:"Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --body:"Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1216; --surface:#161b21; --sunk:#1c222a; --ink:#e7eaee; --muted:#9aa3ae; --line:#262d36; --line-strong:#333c47;
+  --accent:#43b18b; --accent-soft:#16302a; --accent-ink:#08140f; --brass:#d3a64f;
+  --ok:#5cc793; --ok-bg:#15301f; --bad:#ef8a62; --bad-bg:#3a2119; --wait:#93b2ec; --wait-bg:#1b2639; --shadow:none; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1216; --surface:#161b21; --sunk:#1c222a; --ink:#e7eaee; --muted:#9aa3ae; --line:#262d36; --line-strong:#333c47;
+  --accent:#43b18b; --accent-soft:#16302a; --accent-ink:#08140f; --brass:#d3a64f;
+  --ok:#5cc793; --ok-bg:#15301f; --bad:#ef8a62; --bad-bg:#3a2119; --wait:#93b2ec; --wait-bg:#1b2639; --shadow:none; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.shell{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100%}
+.side{position:sticky;top:env(safe-area-inset-top,0px);height:calc(100vh - env(safe-area-inset-top,0px));display:flex;flex-direction:column;gap:20px;background:var(--surface);border-right:1px solid var(--line);padding:20px 14px;padding-left:max(14px,env(safe-area-inset-left,0px))}
+.brand{display:flex;align-items:center;gap:10px;padding:0 6px}
+.mark{width:34px;height:34px;border-radius:9px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:700;font-size:13px;letter-spacing:.02em;flex:none}
+.brand b{display:block;font-size:15px;font-weight:700;line-height:1.2}
+.brand small{display:block;color:var(--muted);font-size:12px;line-height:1.3}
+nav{display:flex;flex-direction:column;gap:2px}
+nav button{display:flex;align-items:center;gap:10px;background:none;border:0;border-radius:8px;color:var(--muted);font:500 14px var(--body);padding:8px 10px;cursor:pointer;text-align:left;white-space:nowrap}
+nav button svg{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+nav button:hover{background:var(--sunk);color:var(--ink)}
+nav button[aria-selected="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding:12px 6px 0;border-top:1px solid var(--line)}
+.viewas{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.viewas select{text-transform:none;letter-spacing:0;font-weight:600;width:100%}
+.demo{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.demo::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--brass)}
+main{padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main>*{max-width:1040px;margin-left:auto;margin-right:auto}
+@media (min-width:900px){main{padding-left:40px;padding-right:max(40px,env(safe-area-inset-right,0px))}}
+@media (max-width:899px){
+  .shell{display:block}
+  .side{height:auto;flex-direction:column;gap:10px;border-right:0;border-bottom:1px solid var(--line);padding-block:10px 0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));z-index:5}
+  .sidetop{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .brand{padding:0}
+  nav{flex-direction:row;overflow-x:auto;gap:0;margin:0 -4px}
+  nav button{border-radius:0;border-bottom:2px solid transparent;padding:9px 10px 10px;background:none!important}
+  nav button svg{display:none}
+  nav button[aria-selected="true"]{border-color:var(--accent)}
+  .side-foot{display:none}
+  main{padding-block:20px 56px}
+}
+.mobile-role{display:none}
+@media (max-width:899px){.mobile-role{display:block}.mobile-role select{font-size:13px;padding:6px 8px;font-weight:600}}
+h2{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:-.015em;margin:0;line-height:1.25;text-wrap:balance}
+h3{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;font-weight:600}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.between{justify-content:space-between}
+.stack{display:flex;flex-direction:column;gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column-reverse;gap:4px}
+.kpi b{display:block;font-weight:700;font-size:22px;letter-spacing:-.02em;line-height:1.2;font-variant-numeric:tabular-nums}
+.kpi span{display:block;font-size:12.5px;color:var(--muted)}
+.kpi span::first-letter{text-transform:uppercase}
+.kpi.bad b{color:var(--bad)} .kpi.good b{color:var(--ok)}
+@media (max-width:640px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi b{font-size:18px}.kpi{padding:12px}}
+button,.btn{font:600 13.5px var(--body);border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);padding:8px 14px;cursor:pointer;line-height:1.2}
+button:hover{background:var(--sunk)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.primary:hover{filter:brightness(1.07);background:var(--accent)}
+button.ghost{background:none;border-color:transparent;color:var(--muted)}
+button.ghost:hover{background:var(--sunk);color:var(--ink)}
+button.small{padding:6px 10px;font-size:13px}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input,select{font:500 14px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;min-width:0}
+label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted);font-weight:600}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;padding:14px;background:var(--sunk);border-radius:10px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border-radius:8px;padding:6px 12px;font-size:13px;font-weight:500;color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);font-weight:600}
+.list{display:flex;flex-direction:column}
+.appt{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.appt:first-child{border-top:0}
+.time{font-weight:700;font-size:15px;font-variant-numeric:tabular-nums}
+.who b{font-weight:600}
+.who div{font-size:13px;color:var(--muted)}
+.status{display:inline-block;font-size:11.5px;font-weight:600;border-radius:999px;padding:1px 8px;margin-left:8px;vertical-align:1px}
+.s-agendado{background:var(--wait-bg);color:var(--wait)} .s-atendido{background:var(--ok-bg);color:var(--ok)} .s-faltou{background:var(--bad-bg);color:var(--bad)}
+.acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:560px){.appt{grid-template-columns:52px minmax(0,1fr)}.acts{grid-column:1/-1;justify-content:flex-start}}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--sunk)}
+th:first-child{border-radius:6px 0 0 6px} th:last-child{border-radius:0 6px 6px 0}
+td{padding:11px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.num,th.num{text-align:right}
+tr.total td{font-weight:700;border-bottom:0}
+.pay{font-weight:700;font-size:15px;color:var(--accent)}
+.low{color:var(--bad);font-weight:700}
+.bars{display:flex;align-items:flex-end;gap:3px;height:140px;padding-top:6px;border-bottom:1px solid var(--line)}
+.bars div{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px;opacity:.9}
+.bars div.zero{background:var(--line)}
+.axis{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:6px;font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .note{font-size:13px;color:var(--muted)}
+.empty{padding:28px 0;text-align:center;color:var(--muted);font-size:13.5px}
+.lostline{border:1px solid var(--bad-bg);padding:12px 14px;background:var(--bad-bg);border-radius:10px;font-size:14px}
+.modal{position:fixed;inset:0;background:rgba(10,14,20,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+.modal .panel{width:min(520px,100%);display:flex;flex-direction:column;gap:10px}
+textarea{width:100%;min-height:180px;font:14px/1.5 var(--body);color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:10px;resize:vertical}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:10px;font-weight:600;font-size:13.5px;z-index:30;box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:calc(100% - 32px)}
+.rolebar{background:var(--wait-bg);color:var(--wait);font-size:13px;font-weight:500;padding:9px 14px;border-radius:10px}
+.opt{display:inline-flex;align-items:center;gap:6px}
+.opt.day{flex-direction:column;gap:0;min-width:56px;padding:7px 10px;border-radius:10px}
+.opt.day small{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.opt.day[aria-pressed="true"] small{color:var(--accent)}
+.opt.day b{font-size:18px;font-weight:700}
+.chip[aria-pressed="true"] .muted{color:inherit;opacity:.85}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:8px}
+.slots .opt{justify-content:center;font-variant-numeric:tabular-nums}
+.panel.off{opacity:.5}
+.stepn{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;margin-right:8px;vertical-align:1px}
+.bigcheck{width:52px;height:52px;border-radius:50%;background:var(--ok-bg);color:var(--ok);display:grid;place-items:center;font-size:26px;font-weight:700}
+.card-club{display:flex;flex-direction:column;gap:16px}
+.stamps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;max-width:340px}
+.stamp{aspect-ratio:1;max-width:100%;border-radius:50%;border:1.5px dashed var(--line-strong);display:grid;place-items:center;font-weight:600;font-size:14px;color:var(--muted)}
+.stamp.on{background:var(--accent);border:1.5px solid var(--accent);color:var(--accent-ink)}
+.stamp:last-child{border-style:solid;border-color:var(--brass);color:var(--brass);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
+.perks{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.auto{display:flex;flex-direction:column;gap:12px}
+.bubble{background:var(--sunk);border:1px solid var(--line);color:var(--ink);border-radius:12px 12px 12px 4px;padding:10px 13px;white-space:pre-line;max-width:520px;font-size:13.5px}
+.bubble.dim{opacity:.45}
+details summary{cursor:pointer;margin-bottom:8px;width:max-content}
+.aud{display:inline-block;font-size:11px;font-weight:600;border-radius:999px;padding:0 7px;margin-right:4px}
+.aud-cliente{background:var(--wait-bg);color:var(--wait)} .aud-barbeiro{background:var(--accent-soft);color:var(--accent)} .aud-dono{background:var(--sunk);color:var(--brass);border:1px solid var(--line)}
+.sent{display:flex;flex-direction:column;gap:6px;padding:12px 0;border-top:1px solid var(--line)}
+.sent:first-child{border-top:0}
+.switch{position:relative;flex-direction:row;cursor:pointer}
+.switch input{position:absolute;opacity:0;width:40px;height:24px;margin:0;cursor:pointer}
+.switch span{width:40px;height:24px;border-radius:12px;background:var(--line-strong);position:relative;display:block;transition:background .2s}
+.switch span::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:left .2s}
+.switch input:checked+span{background:var(--accent)}
+.switch input:checked+span::after{left:19px}
+.switch input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="shell">
+<aside class="side">
+  <div class="sidetop">
+    <div class="brand"><div class="mark" aria-hidden="true">CC</div><div><b>Cadeira Cheia</b><small id="shopName">Barbearia Exemplo</small></div></div>
+    <label class="mobile-role"><span class="sr">Ver como</span><select id="roleSelM" aria-label="Ver como"></select></label>
+  </div>
+  <nav role="tablist" id="tabs"></nav>
+  <div class="side-foot">
+    <label class="viewas">Ver como<select id="roleSel"></select></label>
+    <span class="demo">Ambiente de demonstração</span>
+  </div>
+</aside>
+<main id="app"></main>
+</div>
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+(function(){
+const KEY='cadeira-cheia-v2';
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parse=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const today=iso(new Date());
+const money=v=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,9);
+const DIAS=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+const MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const fmtDay=s=>{const d=parse(s);return DIAS[d.getDay()]+', '+d.getDate()+' de '+MESES[d.getMonth()]};
+
+function seed(){
+  let r=7; const rnd=()=>{r=(r*16807)%2147483647;return (r-1)/2147483646};
+  const barbers=[{id:'b1',name:'Rafael',com:50},{id:'b2',name:'Diego',com:45},{id:'b3',name:'Thiago',com:40}];
+  const services=[{id:'s1',name:'Corte',price:40},{id:'s2',name:'Barba',price:30},{id:'s3',name:'Corte + barba',price:60},{id:'s4',name:'Pezinho',price:15},{id:'s5',name:'Sobrancelha',price:15}];
+  const weights=['s1','s1','s1','s3','s3','s2','s4','s5'];
+  const names=['Lucas','Pedro','Gabriel','Matheus','Felipe','Bruno','Vinícius','Caio','Gustavo','Igor','André','Marcos','Rodrigo','Leandro','Henrique','Samuel','Otávio','Renan','Danilo','Fábio','Júlio','Arthur','Enzo','Murilo'];
+  const appts=[]; const now=new Date(); const nowMin=now.getHours()*60+now.getMinutes();
+  const start=new Date(now.getFullYear(),now.getMonth(),1); const end=new Date(now.getFullYear(),now.getMonth(),now.getDate()+3);
+  for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
+    if(d.getDay()===0) continue;
+    const ds=iso(d);
+    barbers.forEach(b=>{
+      const slots=[9,10,11,13,14,15,16,17,18].filter(()=>rnd()<0.72);
+      slots.forEach(h=>{
+        const mm=rnd()<0.5?0:30; const pick=weights[Math.floor(rnd()*weights.length)]; const sv=services.find(s=>s.id===pick);
+        let status='agendado';
+        if(ds<today||(ds===today&&h*60+mm<nowMin)) status=rnd()<0.08?'faltou':'atendido';
+        const n=names[Math.floor(rnd()*names.length)];
+        appts.push({id:uid(),date:ds,time:pad(h)+':'+pad(mm),client:n,phone:'(32) 9'+Math.floor(8000+rnd()*1999)+'-'+Math.floor(1000+rnd()*8999),barberId:b.id,serviceId:sv.id,price:sv.price,status});
+      });
+    });
+  }
+  const products=[{id:'p1',name:'Pomada modeladora',qty:14,min:5,price:45},{id:'p2',name:'Óleo para barba',qty:3,min:4,price:38},{id:'p3',name:'Shampoo anticaspa',qty:9,min:4,price:32},{id:'p4',name:'Lâminas (caixa)',qty:2,min:3,price:25},{id:'p5',name:'Refrigerante lata',qty:20,min:12,price:6}];
+  const sales=[];
+  for(let i=0;i<22;i++){const day=1+Math.floor(rnd()*Math.max(1,now.getDate()));const p=products[Math.floor(rnd()*4)];const b=barbers[Math.floor(rnd()*3)];
+    sales.push({id:uid(),date:iso(new Date(now.getFullYear(),now.getMonth(),day)),productId:p.id,qty:1,price:p.price,barberId:b.id});}
+  const client={name:'Lucas Almeida',phone:'(32) 99812-4410',member:false};
+  const past=appts.filter(a=>a.status==='atendido'); const step=Math.floor(past.length/7);
+  for(let i=0;i<7;i++){const a=past[i*step+3];if(a){a.client=client.name;a.phone=client.phone}}
+  return {shop:'Barbearia Exemplo',barbers,services,appts,products,sales,prodCom:10,client,
+    club:{every:10,plan:'Clube Cadeira Cheia',price:99},
+    auto:{confirm:true,remind:true,after:true,away:true},msgs:[]};
+}
+let S;
+try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){S=null}
+if(!S||!S.barbers) S=seed();
+/* complementa dados salvos de versões anteriores */
+S.owner=S.owner||{name:'Dono',phone:'(32) 99900-1122'};
+S.barbers.forEach((b,i)=>{if(b.phone===undefined)b.phone='(32) 9'+(8811+i*137)+'-'+(2040+i*311)});
+S.auto=Object.assign({confirm:true,remind:true,after:true,away:true,barberNew:true,barberDaily:true,ownerDaily:true,ownerMonth:true},S.auto||{});
+S.msgs=S.msgs||[];
+if(S.showPhones===undefined) S.showPhones=false;
+S.optout=S.optout||['Caio','Enzo'];
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+
+const ui={bk:{},bkDone:null,role:'dono',tab:'agenda',day:today,barber:'all',month:today.slice(0,7),addOpen:false,resetArm:false,saleBy:S.barbers[0]?S.barbers[0].id:''};
+const B=id=>S.barbers.find(b=>b.id===id)||{name:'—',com:0};
+const SV=id=>S.services.find(s=>s.id===id)||{name:'—',price:0};
+
+function toast(msg){const t=document.getElementById('toastRoot');t.innerHTML='<div class="toast" role="status">'+esc(msg)+'</div>';clearTimeout(toast.t);toast.t=setTimeout(()=>t.innerHTML='',2200)}
+function share(title,text){
+  const done=()=>toast('Copiado. É só colar no WhatsApp.');
+  const fallback=()=>{const m=document.getElementById('modalRoot');
+    m.innerHTML='<div class="modal"><div class="panel"><h3>'+esc(title)+'</h3><textarea id="shareText">'+esc(text)+'</textarea><p class="note">Selecione o texto e copie.</p><div class="row"><button class="primary" id="closeModal">Fechar</button></div></div></div>';
+    const ta=document.getElementById('shareText');ta.focus();ta.select();document.getElementById('closeModal').onclick=()=>m.innerHTML='';};
+  try{navigator.clipboard.writeText(text).then(done,fallback)}catch(e){fallback()}
+}
+
+/* ---------- AGENDA ---------- */
+function agenda(){
+  const me=ui.role!=='dono'?B(ui.role):null;
+  if(me) ui.barber=ui.role;
+  const all=S.appts.filter(a=>a.date===ui.day&&(!me||a.barberId===ui.role));
+  const list=all.filter(a=>ui.barber==='all'||a.barberId===ui.barber).sort((a,b)=>a.time.localeCompare(b.time));
+  const done=all.filter(a=>a.status==='atendido'), miss=all.filter(a=>a.status==='faltou'), wait=all.filter(a=>a.status==='agendado');
+  const sum=x=>x.reduce((t,a)=>t+a.price,0);
+  const label=ui.day===today?'Hoje':fmtDay(ui.day);
+  const k2=me?`<div class="kpi good"><b>${money(sum(done)*me.com/100)}</b><span>sua comissão no dia (${done.length} atend.)</span></div>`
+             :`<div class="kpi good"><b>${money(sum(done))}</b><span>${done.length} atendidos</span></div>`;
+  const k4=me?`<div class="kpi bad"><b>${money(sum(miss)*me.com/100)}</b><span>comissão perdida com ${miss.length} falta${miss.length===1?'':'s'}</span></div>`
+             :`<div class="kpi bad"><b>${money(sum(miss))}</b><span>perdidos com ${miss.length} falta${miss.length===1?'':'s'}</span></div>`;
+  return `
+  <div class="stack">
+    ${me?`<div class="rolebar">Você está vendo como ${esc(me.name)}: só a sua agenda, os seus clientes e a sua comissão.</div>`:''}
+    <div class="row between">
+      <div><h2>${esc(label)}</h2><div class="note">${ui.day===today?esc(fmtDay(ui.day)):''}</div></div>
+      <div class="row">
+        <button class="small" data-act="day" data-d="-1" aria-label="Dia anterior">‹ Anterior</button>
+        <input type="date" id="dayPick" value="${ui.day}">
+        <button class="small" data-act="day" data-d="1" aria-label="Próximo dia">Próximo ›</button>
+      </div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><b>${all.length}</b><span>horários marcados</span></div>
+      ${k2}
+      <div class="kpi"><b>${wait.length}</b><span>ainda por vir</span></div>
+      ${k4}
+    </div>
+    <div class="panel stack">
+      <div class="row between">
+        ${me?`<h3 style="margin:0">Agenda de ${esc(me.name)}</h3>`:`<div class="chips" role="group" aria-label="Filtrar por barbeiro">
+          <button class="chip" data-act="barber" data-b="all" aria-pressed="${ui.barber==='all'}">Todos</button>
+          ${S.barbers.map(b=>`<button class="chip" data-act="barber" data-b="${b.id}" aria-pressed="${ui.barber===b.id}">${esc(b.name)}</button>`).join('')}
+        </div>`}
+        <div class="row">
+          ${wait.length?`<button class="small" data-act="remindAll">Lembretes do dia</button>`:''}
+          <button class="primary small" data-act="toggleAdd">${ui.addOpen?'Fechar':'+ Novo horário'}</button>
+        </div>
+      </div>
+      ${ui.addOpen?addForm():''}
+      <div class="list">
+        ${list.length?list.map(row).join(''):`<div class="empty">Nenhum horário ${ui.barber==='all'?'neste dia':'para este barbeiro'}. Toque em “+ Novo horário” para marcar.</div>`}
+      </div>
+    </div>
+  </div>`;
+}
+function addForm(){
+  return `<form class="form" id="addForm">
+    <label>Hora<input type="time" id="fTime" required value="14:00"></label>
+    <label>Cliente<input id="fClient" required placeholder="Nome"></label>
+    <label>WhatsApp<input id="fPhone" placeholder="(32) 9...."></label>
+    <label>Barbeiro<select id="fBarber">${S.barbers.filter(b=>ui.role==='dono'||b.id===ui.role).map(b=>`<option value="${b.id}" ${ui.barber===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label>
+    <label>Serviço<select id="fService">${S.services.map(s=>`<option value="${s.id}">${esc(s.name)} · ${money(s.price)}</option>`).join('')}</select></label>
+    <button class="primary" type="submit">Marcar</button>
+  </form>`;
+}
+function row(a){
+  const sv=SV(a.serviceId);
+  const acts=a.status==='agendado'
+    ? `<button class="small" data-act="st" data-id="${a.id}" data-s="atendido">Atendido</button><button class="small" data-act="st" data-id="${a.id}" data-s="faltou">Faltou</button><button class="small ghost" data-act="remind" data-id="${a.id}">Lembrete</button>`
+    : `<button class="small ghost" data-act="st" data-id="${a.id}" data-s="agendado">Desfazer</button>`;
+  return `<div class="appt">
+    <div class="time">${a.time}</div>
+    <div class="who"><b>${esc(a.client)}</b><span class="status s-${a.status}">${a.status}</span>
+      <div>${esc(sv.name)} · ${money(a.price)} · com ${esc(B(a.barberId).name)}</div></div>
+    <div class="acts">${acts}</div>
+  </div>`;
+}
+function reminderText(a){
+  const when=a.date===today?'hoje':(a.date===iso(new Date(Date.now()+864e5))?'amanhã':'no dia '+parse(a.date).toLocaleDateString('pt-BR'));
+  return `Olá, ${a.client}! Passando para lembrar do seu horário ${when} às ${a.time} com o ${B(a.barberId).name} (${SV(a.serviceId).name}) na ${S.shop}.\nResponda 1 para confirmar ou 2 se precisar remarcar. Até lá!`;
+}
+
+/* ---------- FECHAMENTO ---------- */
+function monthData(m){
+  const ap=S.appts.filter(a=>a.date.startsWith(m)); const sl=S.sales.filter(s=>s.date.startsWith(m));
+  const rows=S.barbers.map(b=>{
+    const mine=ap.filter(a=>a.barberId===b.id&&a.status==='atendido');
+    const serv=mine.reduce((t,a)=>t+a.price,0);
+    const prod=sl.filter(s=>s.barberId===b.id).reduce((t,s)=>t+s.price*s.qty,0);
+    const cs=serv*b.com/100, cp=prod*S.prodCom/100;
+    return {b,n:mine.length,serv,prod,cs,cp,pay:cs+cp,miss:ap.filter(a=>a.barberId===b.id&&a.status==='faltou').length};
+  });
+  const serv=rows.reduce((t,r)=>t+r.serv,0), prod=rows.reduce((t,r)=>t+r.prod,0), pay=rows.reduce((t,r)=>t+r.pay,0);
+  const miss=ap.filter(a=>a.status==='faltou'); const lost=miss.reduce((t,a)=>t+a.price,0);
+  const [y,mo]=m.split('-').map(Number); const days=new Date(y,mo,0).getDate(); const daily=[];
+  for(let d=1;d<=days;d++){const ds=m+'-'+pad(d);daily.push(ap.filter(a=>a.date===ds&&a.status==='atendido').reduce((t,a)=>t+a.price,0)+sl.filter(s=>s.date===ds).reduce((t,s)=>t+s.price*s.qty,0))}
+  return {rows,serv,prod,total:serv+prod,pay,house:serv+prod-pay,miss:miss.length,lost,daily,label:MESES[mo-1]+' de '+y};
+}
+function fechamento(){
+  const D=monthData(ui.month); const max=Math.max(1,...D.daily);
+  const best=D.daily.indexOf(Math.max(...D.daily))+1;
+  return `
+  <div class="stack">
+    <div class="row between">
+      <div><h2>Fechamento de ${esc(D.label)}</h2><div class="note">Calculado a partir dos atendimentos marcados como “atendido” e das vendas de produto.</div></div>
+      <div class="row"><input type="month" id="monthPick" value="${ui.month}"><button class="primary small" data-act="copyClose">Copiar fechamento</button></div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><b>${money(D.total)}</b><span>faturamento total</span></div>
+      <div class="kpi"><b>${money(D.pay)}</b><span>comissões a pagar</span></div>
+      <div class="kpi good"><b>${money(D.house)}</b><span>fica na barbearia</span></div>
+      <div class="kpi bad"><b>${money(D.lost)}</b><span>perdidos com ${D.miss} faltas</span></div>
+    </div>
+    <div class="panel">
+      <h3>Comissão por barbeiro</h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Barbeiro</th><th class="num">Atend.</th><th class="num">Serviços</th><th class="num">%</th><th class="num">Produtos</th><th class="num">Faltas</th><th class="num">A pagar</th></tr></thead>
+        <tbody>${D.rows.map(r=>`<tr><td><b>${esc(r.b.name)}</b></td><td class="num">${r.n}</td><td class="num">${money(r.serv)}</td><td class="num">${r.b.com}%</td><td class="num">${money(r.prod)}</td><td class="num">${r.miss}</td><td class="num"><span class="pay">${money(r.pay)}</span></td></tr>`).join('')}
+        <tr class="total"><td>Total</td><td class="num">${D.rows.reduce((t,r)=>t+r.n,0)}</td><td class="num">${money(D.serv)}</td><td></td><td class="num">${money(D.prod)}</td><td class="num">${D.miss}</td><td class="num">${money(D.pay)}</td></tr></tbody>
+      </table></div>
+      <p class="note">Comissão de produto: ${S.prodCom}% sobre o que cada barbeiro vendeu. Os percentuais mudam em “Equipe e preços”.</p>
+    </div>
+    <div class="panel">
+      <h3>Faturamento por dia</h3>
+      <div class="bars" role="img" aria-label="Faturamento diário do mês">${D.daily.map((v,i)=>`<div class="${v?'':'zero'}" style="height:${Math.max(2,v/max*100)}%" title="Dia ${i+1}: ${money(v)}"></div>`).join('')}</div>
+      <div class="axis"><span>dia 1</span><span>maior dia: ${D.total?`dia ${best}, ${money(Math.max(...D.daily))}`:'—'}</span><span>dia ${D.daily.length}</span></div>
+    </div>
+    ${D.lost?`<div class="lostline">As faltas deste mês somam <b>${money(D.lost)}</b>. Com lembrete automático no WhatsApp, boa parte desses horários seria confirmada ou remarcada a tempo.</div>`:''}
+  </div>`;
+}
+function closeText(m){
+  const D=monthData(m||ui.month);
+  return `FECHAMENTO · ${D.label.toUpperCase()}\n${S.shop}\n\nFaturamento: ${money(D.total)}\n  Serviços: ${money(D.serv)}\n  Produtos: ${money(D.prod)}\n\nComissões:\n${D.rows.map(r=>`  ${r.b.name}: ${money(r.pay)} (${r.n} atend., ${r.b.com}%)`).join('\n')}\n\nFica na barbearia: ${money(D.house)}\nFaltas: ${D.miss} (${money(D.lost)} perdidos)`;
+}
+
+/* ---------- MEU MÊS (barbeiro) ---------- */
+function meumes(){
+  const me=B(ui.role); const D=monthData(ui.month); const r=D.rows.find(x=>x.b.id===ui.role);
+  const ap=S.appts.filter(a=>a.date.startsWith(ui.month)&&a.barberId===ui.role);
+  const [y,mo]=ui.month.split('-').map(Number); const days=new Date(y,mo,0).getDate(); const daily=[];
+  for(let d=1;d<=days;d++){const ds=ui.month+'-'+pad(d);
+    daily.push(ap.filter(a=>a.date===ds&&a.status==='atendido').reduce((t,a)=>t+a.price,0)*me.com/100
+      +S.sales.filter(s=>s.date===ds&&s.barberId===ui.role).reduce((t,s)=>t+s.price*s.qty,0)*S.prodCom/100)}
+  const max=Math.max(1,...daily);
+  const lost=ap.filter(a=>a.status==='faltou').reduce((t,a)=>t+a.price,0)*me.com/100;
+  const bySvc=S.services.map(s=>{const x=ap.filter(a=>a.serviceId===s.id&&a.status==='atendido');return {s,n:x.length,v:x.reduce((t,a)=>t+a.price,0)}}).filter(x=>x.n);
+  return `
+  <div class="stack">
+    <div class="rolebar">Você está vendo como ${esc(me.name)}: só a sua agenda, os seus clientes e a sua comissão.</div>
+    <div class="row between">
+      <div><h2>Meu mês · ${esc(D.label)}</h2><div class="note">Atualiza sozinho a cada atendimento marcado. É o mesmo cálculo que o dono vê no fechamento.</div></div>
+      <input type="month" id="monthPick" value="${ui.month}">
+    </div>
+    <div class="kpis">
+      <div class="kpi good"><b>${money(r.pay)}</b><span>a receber no mês</span></div>
+      <div class="kpi"><b>${r.n}</b><span>atendimentos</span></div>
+      <div class="kpi"><b>${money(r.cs)}</b><span>${me.com}% de ${money(r.serv)} em serviços</span></div>
+      <div class="kpi"><b>${money(r.cp)}</b><span>${S.prodCom}% de ${money(r.prod)} em produtos</span></div>
+    </div>
+    <div class="panel">
+      <h3>Sua comissão por dia</h3>
+      <div class="bars" role="img" aria-label="Comissão diária do mês">${daily.map((v,i)=>`<div class="${v?'':'zero'}" style="height:${Math.max(2,v/max*100)}%" title="Dia ${i+1}: ${money(v)}"></div>`).join('')}</div>
+      <div class="axis"><span>dia 1</span><span>dia ${days}</span></div>
+    </div>
+    <div class="panel">
+      <h3>O que você fez</h3>
+      <div class="tablewrap"><table><thead><tr><th>Serviço</th><th class="num">Qtd.</th><th class="num">Valor</th><th class="num">Sua parte</th></tr></thead><tbody>
+        ${bySvc.length?bySvc.map(x=>`<tr><td>${esc(x.s.name)}</td><td class="num">${x.n}</td><td class="num">${money(x.v)}</td><td class="num">${money(x.v*me.com/100)}</td></tr>`).join(''):'<tr><td colspan="4" class="muted">Nenhum atendimento neste mês ainda.</td></tr>'}
+      </tbody></table></div>
+    </div>
+    ${lost?`<div class="lostline">Você deixou de ganhar <b>${money(lost)}</b> com ${r.miss} falta${r.miss===1?'':'s'} de cliente neste mês.</div>`:''}
+  </div>`;
+}
+
+/* ---------- MENSAGENS ---------- */
+const clubCount=name=>S.appts.filter(a=>a.client===name&&a.status==='atendido').length;
+function msgConfirm(a){return `Olá, ${a.client}! Seu horário está confirmado\n${fmtDay(a.date)}, às ${a.time}\n${SV(a.serviceId).name} com ${B(a.barberId).name}\n${S.shop}\n\nPrecisa remarcar? É só responder esta mensagem.`}
+function msgAfter(a){const n=clubCount(a.client)%S.club.every;
+  return `Valeu pela visita, ${a.client}! Como foi o ${SV(a.serviceId).name.toLowerCase()} com o ${B(a.barberId).name}? Responda com uma nota de 1 a 5.\n\nClube: você está com ${n} de ${S.club.every} selos.${n===0?' Seu próximo corte é por nossa conta.':''}`}
+function msgAway(name){return `Fala, ${name}! Faz um tempo que você não aparece por aqui. Bora deixar o visual em dia? Escolha seu horário pelo link de agendamento da ${S.shop}.`}
+function msgBarberNew(a,cancel){return cancel
+  ?`Horário cancelado: ${a.client}, ${fmtDay(a.date)} às ${a.time} (${SV(a.serviceId).name}). O horário ficou livre na sua agenda.`
+  :`Novo horário na sua agenda: ${a.client}, ${fmtDay(a.date)} às ${a.time}. Serviço: ${SV(a.serviceId).name} (${money(a.price)}).`}
+function msgBarberDaily(b,day){const l=S.appts.filter(a=>a.date===day&&a.barberId===b.id&&a.status==='agendado').sort((x,y)=>x.time.localeCompare(y.time));
+  return `Boa noite, ${b.name}. Sua agenda de ${fmtDay(day)}:\n${l.length?l.map(a=>`${a.time} · ${a.client} · ${SV(a.serviceId).name}`).join('\n'):'Nenhum horário marcado ainda.'}\n\nTotal: ${l.length} cliente${l.length===1?'':'s'}.`}
+function msgOwnerDaily(day){const ap=S.appts.filter(a=>a.date===day);const done=ap.filter(a=>a.status==='atendido');const miss=ap.filter(a=>a.status==='faltou');
+  const sales=S.sales.filter(s=>s.date===day).reduce((t,s)=>t+s.price*s.qty,0);const tm=iso(new Date(parse(day).getTime()+864e5));
+  return `Resumo de ${fmtDay(day)} · ${S.shop}\n\nFaturamento: ${money(done.reduce((t,a)=>t+a.price,0)+sales)}\nAtendimentos: ${done.length}\nFaltas: ${miss.length} (${money(miss.reduce((t,a)=>t+a.price,0))} perdidos)\n\n${S.barbers.map(b=>`${b.name}: ${done.filter(a=>a.barberId===b.id).length} atend.`).join('\n')}\n\nAmanhã: ${S.appts.filter(a=>a.date===tm&&a.status==='agendado').length} horários marcados.`}
+function logMsg(kind,to,phone,text,aud){S.msgs.unshift({id:uid(),at:new Date().toISOString(),kind,to,phone:phone||'',text,aud:aud||'cliente'});S.msgs=S.msgs.slice(0,80)}
+function notifyBarber(a,cancel){if(!S.auto.barberNew)return;const b=B(a.barberId);if(!b.id)return;logMsg(cancel?'Cancelamento':'Novo horário',b.name,b.phone,msgBarberNew(a,cancel),'barbeiro')}
+
+/* ---------- CLIENTE ---------- */
+const nowMin=()=>{const d=new Date();return d.getHours()*60+d.getMinutes()};
+const taken=(day,t,b)=>S.appts.some(a=>a.date===day&&a.time===t&&a.barberId===b&&a.status!=='faltou');
+function slotsFor(day,barber){
+  const out=[];for(let h=9;h<19;h++)for(const m of [0,30]){const t=pad(h)+':'+pad(m);
+    if(day===today&&h*60+m<=nowMin()+20) continue;
+    if(barber==='any'?S.barbers.some(b=>!taken(day,t,b.id)):!taken(day,t,barber)) out.push(t)}
+  return out;
+}
+function openDays(){const out=[];const d=new Date();while(out.length<7){if(d.getDay()!==0)out.push(iso(d));d.setDate(d.getDate()+1)}return out}
+function clientBar(){return `<div class="rolebar">Visão do cliente: é o que ele vê no celular, pelo link da barbearia.</div>`}
+function marcar(){
+  const k=ui.bk;
+  if(ui.bkDone){const a=S.appts.find(x=>x.id===ui.bkDone);if(a) return `<div class="stack">${clientBar()}
+    <div class="panel stack" style="text-align:center;align-items:center;padding:28px 14px">
+      <div class="bigcheck" aria-hidden="true">✓</div>
+      <h2>Horário marcado</h2>
+      <div>${esc(fmtDay(a.date))}, às <b>${a.time}</b><br>${esc(SV(a.serviceId).name)} com ${esc(B(a.barberId).name)} · ${money(a.price)}</div>
+      ${S.auto.confirm?`<div class="note">A confirmação foi enviada para o seu WhatsApp. Um dia antes, você recebe um lembrete.</div>`:''}
+      <div class="row" style="justify-content:center"><button data-act="go" data-t="meus">Ver meus horários</button><button class="primary" data-act="bkNew">Marcar outro</button></div>
+    </div></div>`}
+  const step=(n,title,body,on)=>`<div class="panel ${on?'':'off'}"><h3><span class="stepn">${n}</span>${title}</h3>${on?body:'<div class="note">Escolha a etapa anterior primeiro.</div>'}</div>`;
+  const svc=S.services.map(s=>`<button class="chip opt" data-act="bk" data-k="service" data-v="${s.id}" aria-pressed="${k.service===s.id}">${esc(s.name)} <span class="muted">${money(s.price)}</span></button>`).join('');
+  const bar=[`<button class="chip opt" data-act="bk" data-k="barber" data-v="any" aria-pressed="${k.barber==='any'}">Qualquer um</button>`].concat(S.barbers.map(b=>`<button class="chip opt" data-act="bk" data-k="barber" data-v="${b.id}" aria-pressed="${k.barber===b.id}">${esc(b.name)}</button>`)).join('');
+  const days=openDays().map(d=>{const dt=parse(d);return `<button class="chip opt day" data-act="bk" data-k="day" data-v="${d}" aria-pressed="${k.day===d}"><small>${d===today?'hoje':DIAS[dt.getDay()].slice(0,3)}</small><b>${dt.getDate()}</b></button>`}).join('');
+  let times='';if(k.day&&k.barber){const sl=slotsFor(k.day,k.barber);
+    times=sl.length?`<div class="slots">${sl.map(t=>`<button class="chip opt" data-act="bk" data-k="time" data-v="${t}" aria-pressed="${k.time===t}">${t}</button>`).join('')}</div>`:'<div class="note">Sem horários livres neste dia. Tente outro dia ou outro barbeiro.</div>'}
+  const ready=k.service&&k.barber&&k.day&&k.time;
+  return `<div class="stack">${clientBar()}
+    <div><h2>Marcar horário</h2><div class="note">${esc(S.shop)} · sem precisar mandar mensagem</div></div>
+    ${step(1,'Serviço',`<div class="chips">${svc}</div>`,true)}
+    ${step(2,'Barbeiro',`<div class="chips">${bar}</div>`,!!k.service)}
+    ${step(3,'Dia',`<div class="chips">${days}</div>`,!!k.barber)}
+    ${step(4,'Horário',times,!!k.day)}
+    <div class="panel row between">
+      <div>${ready?`<b>${esc(fmtDay(k.day))}, ${k.time}</b><div class="note">${esc(SV(k.service).name)} · ${money(SV(k.service).price)} · ${k.barber==='any'?'primeiro barbeiro livre':'com '+esc(B(k.barber).name)}</div>`:'<span class="note">Escolha serviço, barbeiro, dia e horário.</span>'}
+        <div class="note">Marcando como ${esc(S.client.name)} · ${esc(S.client.phone)}</div></div>
+      <button class="primary" data-act="bkConfirm" ${ready?'':'disabled'}>Confirmar horário</button>
+    </div>
+  </div>`;
+}
+function meus(){
+  const mine=S.appts.filter(a=>a.client===S.client.name);
+  const up=mine.filter(a=>a.status==='agendado'&&a.date>=today).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  const past=mine.filter(a=>a.status!=='agendado').sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
+  return `<div class="stack">${clientBar()}
+    <div class="row between"><h2>Meus horários</h2><button class="primary small" data-act="go" data-t="marcar">+ Marcar</button></div>
+    <div class="panel"><h3>Próximos</h3><div class="list">${up.length?up.map(a=>`<div class="appt"><div class="time">${a.time}</div>
+      <div class="who"><b>${esc(fmtDay(a.date))}</b><div>${esc(SV(a.serviceId).name)} · ${money(a.price)} · com ${esc(B(a.barberId).name)}</div></div>
+      <div class="acts"><button class="small ghost" data-act="cancel" data-id="${a.id}">Cancelar</button></div></div>`).join(''):'<div class="empty">Nenhum horário marcado.</div>'}</div></div>
+    <div class="panel"><h3>Histórico</h3><div class="list">${past.length?past.map(a=>`<div class="appt"><div class="time">${parse(a.date).getDate()}/${pad(parse(a.date).getMonth()+1)}</div>
+      <div class="who"><b>${esc(SV(a.serviceId).name)}</b><span class="status s-${a.status}">${a.status==='atendido'?'feito':'faltou'}</span><div>com ${esc(B(a.barberId).name)} · ${money(a.price)}</div></div><div></div></div>`).join(''):'<div class="empty">Ainda sem visitas.</div>'}</div></div>
+  </div>`;
+}
+function clube(){
+  const total=clubCount(S.client.name), ev=S.club.every, n=total%ev, left=ev-n;
+  return `<div class="stack">${clientBar()}
+    <div><h2>Clube</h2><div class="note">Cada atendimento vale um selo. Completou ${ev}, o próximo corte é grátis.</div></div>
+    <div class="panel card-club">
+      <div class="row between"><div><h3 style="margin:0">Cartão de selos</h3><div class="note">${esc(S.client.name)} · ${total} visita${total===1?'':'s'} no total</div></div>
+        ${S.client.member?'<span class="status s-atendido">membro do clube</span>':''}</div>
+      <div class="stamps">${Array.from({length:ev},(_,i)=>`<div class="stamp ${i<n?'on':''}">${i===ev-1?'grátis':i<n?'✓':i+1}</div>`).join('')}</div>
+      <b>${n===0&&total>0?'Seu próximo corte é por nossa conta!':`Faltam ${left} selo${left===1?'':'s'} para o corte grátis`}</b>
+    </div>
+    <div class="panel stack">
+      <div class="row between"><div><h3 style="margin:0">${esc(S.club.plan)}</h3><div class="pay">${money(S.club.price)}<span class="note"> /mês</span></div></div>
+        ${S.client.member?'<button data-act="join">Sair do plano</button>':'<button class="primary" data-act="join">Quero assinar</button>'}</div>
+      <ul class="perks"><li>Cortes ilimitados no mês</li><li>Horário reservado com prioridade</li><li>10% de desconto em produtos</li><li>Selos em dobro no cartão</li></ul>
+      <div class="note">No app real, o pagamento seria mensal no Pix ou no cartão.</div>
+    </div>
+  </div>`;
+}
+
+/* ---------- WHATSAPP (dono) ---------- */
+const sampleA=()=>({client:'Pedro',date:iso(new Date(Date.now()+864e5)),time:'15:30',serviceId:S.services[0].id,barberId:S.barbers[0].id,price:S.services[0].price});
+const GROUPS=[['cliente','Para os clientes','Saem do WhatsApp da barbearia para o celular do cliente.'],
+  ['barbeiro','Para os barbeiros','Cada barbeiro recebe só o que é dele, no número cadastrado em “Equipe e preços”.'],
+  ['dono','Para o dono','Os números do negócio chegam sozinhos, sem precisar abrir o sistema.']];
+const AUTOS2=[
+  ['barberNew','barbeiro','Novo horário e cancelamento','Na hora em que um cliente marca ou cancela com ele.',()=>msgBarberNew(sampleA())],
+  ['barberDaily','barbeiro','Agenda do dia seguinte','Todo dia às 20h, com a lista de clientes de amanhã.',()=>S.barbers[0]?msgBarberDaily(S.barbers[0],iso(new Date(Date.now()+864e5))):''],
+  ['ownerDaily','dono','Resumo do dia','Todo dia às 19h: faturamento, atendimentos, faltas e o movimento de amanhã.',()=>msgOwnerDaily(today)],
+  ['ownerMonth','dono','Fechamento do mês','No dia 1º, com a comissão de cada barbeiro já calculada.',()=>closeText(today.slice(0,7))]];
+const AUTOS=[
+  ['confirm','Confirmação ao marcar','Assim que o cliente marca pelo app ou pela recepção.',()=>msgConfirm({client:'Pedro',date:today,time:'15:30',serviceId:S.services[0].id,barberId:S.barbers[0].id})],
+  ['remind','Lembrete um dia antes','Todo dia às 18h, para os horários do dia seguinte. É o que mais reduz falta.',()=>reminderText({client:'Pedro',date:iso(new Date(Date.now()+864e5)),time:'15:30',serviceId:S.services[0].id,barberId:S.barbers[0].id})],
+  ['after','Pós-atendimento','Quando o barbeiro marca “atendido”: pede nota e mostra os selos do clube.',()=>msgAfter({client:'Pedro',serviceId:S.services[0].id,barberId:S.barbers[0].id})],
+  ['away','Cliente sumido','Quem não volta há mais de 30 dias recebe um convite para marcar.',()=>msgAway('Pedro')]];
+function whats(){
+  const month=S.msgs.filter(m=>m.at.slice(0,7)===today.slice(0,7)).length;
+  const shown=S.msgs.filter(m=>!ui.logF||ui.logF==='all'||(m.aud||'cliente')===ui.logF);
+  return `<div class="stack">
+    <div class="row between"><div><h2>WhatsApp automático</h2><div class="note">${month} mensage${month===1?'m':'ns'} enviada${month===1?'':'s'} este mês · nesta demonstração o envio é simulado</div></div>
+      <button class="primary small" data-act="simulate">Rodar envios de hoje</button></div>
+    ${GROUPS.map(([g,gt,gd])=>{
+      const items=(g==='cliente'?AUTOS.map(([k,t,w,f])=>[k,'cliente',t,w,f]):AUTOS2.filter(x=>x[1]===g));
+      return `<section class="stack" style="gap:10px"><div><h3 style="margin:0">${gt}</h3><div class="note">${gd}</div></div>
+      ${items.map(([k,_g,t,w,f])=>`<div class="panel auto">
+        <div class="row between"><div><b>${t}</b><div class="note">${w}</div></div>
+          <label class="switch"><input type="checkbox" data-auto="${k}" ${S.auto[k]?'checked':''}><span aria-hidden="true"></span><em class="sr">${t}</em></label></div>
+        <details ${g==='cliente'?'open':''}><summary class="note">Ver mensagem</summary><div class="bubble ${S.auto[k]?'':'dim'}">${esc(f())}</div></details></div>`).join('')}</section>`}).join('')}
+    <div class="panel"><div class="row between"><h3 style="margin:0">Enviadas</h3>
+        <div class="row"><div class="chips">${[['all','Todas'],['cliente','Clientes'],['barbeiro','Barbeiros'],['dono','Dono']].map(([k,l])=>`<button class="chip" data-act="logF" data-f="${k}" aria-pressed="${(ui.logF||'all')===k}">${l}</button>`).join('')}</div>
+        ${S.msgs.length?'<button class="small ghost" data-act="clearLog">Limpar</button>':''}</div></div>
+      <div class="list">${shown.length?shown.map(m=>`<div class="sent"><div class="note"><span class="aud aud-${m.aud||'cliente'}">${({cliente:'Cliente',barbeiro:'Barbeiro',dono:'Dono'})[m.aud||'cliente']}</span> <b>${esc(m.kind)}</b> · para ${esc(m.to)} ${esc(m.phone)} · ${new Date(m.at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div><div class="bubble">${esc(m.text)}</div></div>`).join(''):'<div class="empty">Nada enviado ainda. Marque um horário na visão do cliente, marque um atendimento como “atendido” ou toque em “Rodar envios de hoje”.</div>'}</div></div>
+  </div>`;
+}
+
+/* ---------- MEUS CLIENTES (barbeiro) ---------- */
+const daysSince=d=>Math.round((parse(today)-parse(d))/864e5);
+const maskPhone=p=>S.showPhones?p:String(p||'').replace(/(\(\d+\) \d)\d+/,'$1••••');
+function clientsOf(bid){
+  const m={};S.appts.filter(a=>a.barberId===bid&&a.status!=='agendado').forEach(a=>{
+    const c=m[a.client]||(m[a.client]={name:a.client,phone:a.phone,visits:0,spent:0,last:'',miss:0});
+    if(a.status==='atendido'){c.visits++;c.spent+=a.price;if(a.date>c.last){c.last=a.date;c.phone=a.phone||c.phone}}else c.miss++});
+  return Object.values(m).filter(c=>c.last).map(c=>({...c,ago:daysSince(c.last),off:S.optout.includes(c.name)}))
+    .sort((a,b)=>b.ago-a.ago||a.name.localeCompare(b.name));
+}
+const TPL=[['livre','Horário livre hoje','Fala, {nome}! Abriu um horário hoje comigo. Quer garantir o seu? É só responder esta mensagem.'],
+  ['sumido','Faz tempo que não vem','E aí, {nome}! Já faz {dias} dias desde o seu último corte. Bora marcar? Tenho horários esta semana.'],
+  ['promo','Promoção da semana','{nome}, esta semana o corte + barba sai por R$ 50 comigo. Responda para reservar seu horário.']];
+const fill=(txt,c,me)=>txt.replace(/\{nome\}/g,c.name.split(' ')[0]).replace(/\{dias\}/g,c.ago)+`\n\n${me.name} · ${S.shop}`;
+function clientes(){
+  const me=B(ui.role); const all=clientsOf(ui.role);
+  const F=ui.cF||'todos';
+  const list=all.filter(c=>F==='todos'||(F==='sumidos'&&c.ago>=15)||(F==='frequentes'&&c.visits>=3));
+  const sel=ui.cSel||(ui.cSel=new Set());
+  const targets=all.filter(c=>sel.has(c.name)&&!c.off);
+  const cp=ui.compose;
+  return `<div class="stack">
+    <div class="rolebar">Você está vendo como ${esc(me.name)}: só a sua agenda, os seus clientes e a sua comissão.</div>
+    <div class="row between"><div><h2>Meus clientes</h2><div class="note">${all.length} clientes atendidos por você · as mensagens saem pelo WhatsApp da ${esc(S.shop)} com a sua assinatura</div></div>
+      <button class="primary small" data-act="compose" ${targets.length?'':'disabled'}>Mensagem para ${targets.length} selecionado${targets.length===1?'':'s'}</button></div>
+    ${cp?`<div class="panel stack compose">
+      <div class="row between"><b>Mensagem para ${cp.to.length} cliente${cp.to.length===1?'':'s'}</b><button class="small ghost" data-act="closeCompose">Fechar</button></div>
+      <div class="chips">${TPL.map(([k,l])=>`<button class="chip" data-act="tpl" data-t="${k}">${l}</button>`).join('')}</div>
+      <label>Texto <span class="muted">({nome} e {dias} são trocados para cada cliente)</span><textarea id="composeText" style="min-height:110px">${esc(cp.text)}</textarea></label>
+      <div><div class="note" style="margin-bottom:6px">Como ${esc(all.find(c=>c.name===cp.to[0])?.name.split(' ')[0]||'')} vai receber:</div><div class="bubble" id="composePrev">${esc(fill(cp.text,all.find(c=>c.name===cp.to[0])||{name:'',ago:0},me))}</div></div>
+      <div class="row between"><span class="note">${esc(cp.to.slice(0,6).join(', '))}${cp.to.length>6?' e mais '+(cp.to.length-6):''}</span>
+        <button class="primary" data-act="sendCompose" ${cp.text.trim()?'':'disabled'}>Enviar</button></div></div>`:''}
+    <div class="panel">
+      <div class="row between" style="margin-bottom:10px"><div class="chips">
+        ${[['todos','Todos'],['sumidos','Sumidos (15+ dias)'],['frequentes','Frequentes (3+ visitas)']].map(([k,l])=>`<button class="chip" data-act="cF" data-f="${k}" aria-pressed="${F===k}">${l}</button>`).join('')}</div>
+        <button class="small ghost" data-act="csAll">${list.filter(c=>!c.off).every(c=>sel.has(c.name))&&list.length?'Desmarcar todos':'Selecionar todos'}</button></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th></th><th>Cliente</th><th>WhatsApp</th><th class="num">Visitas</th><th>Última visita</th><th class="num">Gastou</th><th></th></tr></thead>
+        <tbody>${list.length?list.map(c=>`<tr>
+          <td><input type="checkbox" data-csel="${esc(c.name)}" ${sel.has(c.name)&&!c.off?'checked':''} ${c.off?'disabled':''} aria-label="Selecionar ${esc(c.name)}"></td>
+          <td><b>${esc(c.name)}</b> ${c.off?'<span class="status s-faltou">não recebe mensagens</span>':c.ago>=15?'<span class="status s-agendado">sumido</span>':c.visits>=3?'<span class="status s-atendido">frequente</span>':''}</td>
+          <td class="muted">${esc(maskPhone(c.phone))}</td><td class="num">${c.visits}</td>
+          <td>${parse(c.last).getDate()}/${pad(parse(c.last).getMonth()+1)} <span class="muted">· ${c.ago===0?'hoje':c.ago+' dia'+(c.ago===1?'':'s')}</span></td>
+          <td class="num">${money(c.spent)}</td>
+          <td class="num"><button class="small" data-act="compose1" data-name="${esc(c.name)}" ${c.off?'disabled':''}>Mensagem</button></td></tr>`).join('')
+          :'<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">Nenhum cliente neste filtro.</td></tr>'}</tbody>
+      </table></div>
+    </div>
+  </div>`;
+}
+
+/* ---------- ESTOQUE ---------- */
+function estoque(){
+  const low=S.products.filter(p=>p.qty<=p.min);
+  const monthSales=S.sales.filter(s=>s.date.startsWith(today.slice(0,7)));
+  return `
+  <div class="stack">
+    <div class="row between">
+      <div><h2>Estoque</h2><div class="note">${low.length?`<span class="low">${low.length} produto${low.length>1?'s':''} no mínimo ou abaixo</span>`:'Tudo acima do mínimo'} · ${monthSales.length} vendas este mês</div></div>
+      <label>Venda feita por<select id="saleBy">${S.barbers.map(b=>`<option value="${b.id}" ${ui.saleBy===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label>
+    </div>
+    <div class="panel">
+      <div class="tablewrap"><table>
+        <thead><tr><th>Produto</th><th class="num">Qtd.</th><th class="num">Mínimo</th><th class="num">Preço</th><th></th></tr></thead>
+        <tbody>${S.products.map(p=>`<tr>
+          <td><b>${esc(p.name)}</b>${p.qty<=p.min?' <span class="status s-faltou">repor</span>':''}</td>
+          <td class="num ${p.qty<=p.min?'low':''}">${p.qty}</td><td class="num">${p.min}</td><td class="num">${money(p.price)}</td>
+          <td class="num"><div class="acts"><button class="small" data-act="sell" data-id="${p.id}" ${p.qty<1?'disabled':''}>Vender 1</button><button class="small ghost" data-act="restock" data-id="${p.id}">+1 entrada</button></div></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+    <div class="panel">
+      <h3>Novo produto</h3>
+      <form class="form" id="prodForm">
+        <label>Nome<input id="pName" required placeholder="Ex.: Pomada matte"></label>
+        <label>Quantidade<input id="pQty" type="number" min="0" value="10" required></label>
+        <label>Mínimo<input id="pMin" type="number" min="0" value="3" required></label>
+        <label>Preço (R$)<input id="pPrice" type="number" min="0" step="0.5" value="40" required></label>
+        <button class="primary" type="submit">Adicionar</button>
+      </form>
+    </div>
+  </div>`;
+}
+
+/* ---------- AJUSTES ---------- */
+function ajustes(){
+  return `
+  <div class="stack">
+    <div><h2>Equipe e preços</h2><div class="note">As mudanças valem para os próximos cálculos do fechamento.</div></div>
+    <div class="panel form" style="background:var(--surface)"><label>Nome da barbearia<input id="shopIn" value="${esc(S.shop)}"></label>
+      <label>WhatsApp do dono (recebe os resumos)<input id="ownerPhone" value="${esc(S.owner.phone)}"></label></div>
+    <div class="panel row between">
+      <div style="flex:1;min-width:200px"><b>Barbeiros veem o telefone completo dos clientes</b><div class="note">Desligado, o barbeiro manda mensagem pelo sistema, mas não consegue copiar o número. A carteira de clientes continua sendo da barbearia.</div></div>
+      <label class="switch"><input type="checkbox" id="showPhones" ${S.showPhones?'checked':''}><span aria-hidden="true"></span><em class="sr">Barbeiros veem o telefone completo</em></label>
+    </div>
+    <div class="panel">
+      <h3>Barbeiros e comissão</h3>
+      <div class="tablewrap"><table><thead><tr><th>Nome</th><th>WhatsApp</th><th class="num">Comissão em serviços</th></tr></thead><tbody>
+        ${S.barbers.map(b=>`<tr><td>${esc(b.name)}</td><td><input style="width:150px" data-edit="phone" data-id="${b.id}" value="${esc(b.phone||'')}" aria-label="WhatsApp de ${esc(b.name)}"></td><td class="num"><input type="number" min="0" max="100" style="width:80px" data-edit="com" data-id="${b.id}" value="${b.com}" aria-label="Comissão de ${esc(b.name)}"> %</td></tr>`).join('')}
+        <tr><td colspan="2">Comissão em produtos (todos)</td><td class="num"><input type="number" min="0" max="100" style="width:80px" id="prodCom" value="${S.prodCom}"> %</td></tr>
+      </tbody></table></div>
+      <form class="form" id="barberForm" style="margin-top:12px">
+        <label>Novo barbeiro<input id="nbName" required placeholder="Nome"></label>
+        <label>Comissão %<input id="nbCom" type="number" min="0" max="100" value="45" required></label>
+        <button type="submit">Adicionar</button>
+      </form>
+    </div>
+    <div class="panel">
+      <h3>Serviços e preços</h3>
+      <div class="tablewrap"><table><thead><tr><th>Serviço</th><th class="num">Preço (R$)</th></tr></thead><tbody>
+        ${S.services.map(s=>`<tr><td>${esc(s.name)}</td><td class="num"><input type="number" min="0" step="1" style="width:90px" data-edit="price" data-id="${s.id}" value="${s.price}" aria-label="Preço de ${esc(s.name)}"></td></tr>`).join('')}
+      </tbody></table></div>
+      <form class="form" id="serviceForm" style="margin-top:12px">
+        <label>Novo serviço<input id="nsName" required placeholder="Ex.: Platinado"></label>
+        <label>Preço (R$)<input id="nsPrice" type="number" min="0" value="50" required></label>
+        <button type="submit">Adicionar</button>
+      </form>
+    </div>
+    <div class="panel row between">
+      <div><b>Backup dos dados</b><div class="note">Os dados ficam guardados neste aparelho. Salve um backup de vez em quando para não perder nada ao trocar de celular ou limpar o navegador.</div></div>
+      <div class="row">
+        <button class="primary" data-act="exportData">Salvar backup</button>
+        <button data-act="importData">Restaurar backup</button>
+      </div>
+    </div>
+    <div class="panel row between">
+      <div><b>Dados de exemplo</b><div class="note">Apaga tudo e volta para os dados fictícios de demonstração.</div></div>
+      <button data-act="reset" class="${ui.resetArm?'primary':''}">${ui.resetArm?'Toque de novo para confirmar':'Recomeçar com dados de exemplo'}</button>
+    </div>
+  </div>`;
+}
+
+/* ---------- RENDER + EVENTS ---------- */
+const app=document.getElementById('app');
+const TABS={dono:[['agenda','Agenda'],['fechamento','Fechamento do mês'],['whats','WhatsApp'],['estoque','Estoque'],['ajustes','Equipe e preços']],
+  barbeiro:[['agenda','Minha agenda'],['clientes','Meus clientes'],['meumes','Meu mês']],
+  cliente:[['marcar','Marcar horário'],['meus','Meus horários'],['clube','Clube']]};
+const tabKey=()=>ui.role==='dono'||ui.role==='cliente'?ui.role:'barbeiro';
+const roleSel=document.getElementById('roleSel'), roleSelM=document.getElementById('roleSelM');
+const ICON={
+  agenda:'<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>',
+  fechamento:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  whats:'<path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12z"/>',
+  estoque:'<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>',
+  ajustes:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/>',
+  meumes:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  clientes:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/>',
+  marcar:'<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M12 12.5v5M9.5 15h5"/>',
+  meus:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  clube:'<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>'};
+function render(){
+  if(ui.role!=='dono'&&ui.role!=='cliente'&&!S.barbers.some(b=>b.id===ui.role)) ui.role='dono';
+  document.getElementById('shopName').textContent=S.shop;
+  const opts=`<option value="dono">Dono</option>`+S.barbers.map(b=>`<option value="${b.id}">${esc(b.name)} (barbeiro)</option>`).join('')+`<option value="cliente">Cliente</option>`;
+  [roleSel,roleSelM].forEach(s=>{s.innerHTML=opts;s.value=ui.role});
+  const tabs=TABS[tabKey()];
+  if(!tabs.some(t=>t[0]===ui.tab)) ui.tab=tabs[0][0];
+  document.getElementById('tabs').innerHTML=tabs.map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${k===ui.tab}"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]||''}</svg>${l}</button>`).join('');
+  app.innerHTML=({agenda,fechamento,estoque,ajustes,meumes,whats,marcar,meus,clube,clientes})[ui.tab]();
+}
+[roleSel,roleSelM].forEach(s=>s.addEventListener('change',()=>{ui.role=s.value;ui.barber=ui.role==='dono'||ui.role==='cliente'?'all':ui.role;ui.bkDone=null;ui.addOpen=false;ui.resetArm=false;ui.compose=null;ui.cSel=new Set();render();window.scrollTo(0,0)}));
+document.getElementById('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;ui.tab=b.dataset.tab;ui.resetArm=false;render();window.scrollTo(0,0)});
+app.addEventListener('click',e=>{
+  const t=e.target.closest('[data-act]'); if(!t) return; const act=t.dataset.act;
+  if(act==='day'){const d=parse(ui.day);d.setDate(d.getDate()+Number(t.dataset.d));ui.day=iso(d);render()}
+  else if(act==='barber'){ui.barber=t.dataset.b;render()}
+  else if(act==='toggleAdd'){ui.addOpen=!ui.addOpen;render();if(ui.addOpen){const c=document.getElementById('fClient');c&&c.focus()}}
+  else if(act==='st'){const a=S.appts.find(x=>x.id===t.dataset.id);a.status=t.dataset.s;
+    if(a.status==='atendido'&&S.auto.after){logMsg('Pós-atendimento',a.client,a.phone,msgAfter(a));save();render();toast('Mensagem de pós-atendimento enviada para '+a.client);return}
+    save();render()}
+  else if(act==='go'){ui.tab=t.dataset.t;ui.bkDone=null;render();window.scrollTo(0,0)}
+  else if(act==='bk'){const k=t.dataset.k;ui.bk[k]=t.dataset.v;
+    if(k==='barber'||k==='day') delete ui.bk.time;
+    render()}
+  else if(act==='bkConfirm'){const k=ui.bk;let b=k.barber;
+    if(b==='any'){const f=S.barbers.find(x=>!taken(k.day,k.time,x.id));if(!f){toast('Esse horário acabou de ser ocupado');delete k.time;render();return}b=f.id}
+    if(taken(k.day,k.time,b)){toast('Esse horário acabou de ser ocupado');delete k.time;render();return}
+    const sv=SV(k.service);const a={id:uid(),date:k.day,time:k.time,client:S.client.name,phone:S.client.phone,barberId:b,serviceId:sv.id,price:sv.price,status:'agendado'};
+    S.appts.push(a);if(S.auto.confirm)logMsg('Confirmação',a.client,a.phone,msgConfirm(a));notifyBarber(a,false);
+    ui.bk={};ui.bkDone=a.id;save();render();window.scrollTo(0,0)}
+  else if(act==='bkNew'){ui.bkDone=null;ui.bk={};render()}
+  else if(act==='cancel'){const a=S.appts.find(x=>x.id===t.dataset.id);S.appts=S.appts.filter(x=>x.id!==a.id);notifyBarber(a,true);save();render();toast('Horário cancelado. O horário voltou a ficar livre.')}
+  else if(act==='join'){S.client.member=!S.client.member;save();render();toast(S.client.member?'Bem-vindo ao clube!':'Você saiu do plano')}
+  else if(act==='clearLog'){S.msgs=[];save();render()}
+  else if(act==='logF'){ui.logF=t.dataset.f;render()}
+  else if(act==='cF'){ui.cF=t.dataset.f;render()}
+  else if(act==='csAll'){const F=ui.cF||'todos';const l=clientsOf(ui.role).filter(c=>!c.off&&(F==='todos'||(F==='sumidos'&&c.ago>=15)||(F==='frequentes'&&c.visits>=3)));
+    const allOn=l.every(c=>ui.cSel.has(c.name));l.forEach(c=>allOn?ui.cSel.delete(c.name):ui.cSel.add(c.name));render()}
+  else if(act==='compose'){const to=clientsOf(ui.role).filter(c=>ui.cSel.has(c.name)&&!c.off).map(c=>c.name);if(!to.length)return;ui.compose={to,text:(ui.compose&&ui.compose.text)||TPL[0][2]};render();window.scrollTo(0,0)}
+  else if(act==='compose1'){ui.compose={to:[t.dataset.name],text:(ui.compose&&ui.compose.text)||TPL[1][2]};render();window.scrollTo(0,0)}
+  else if(act==='closeCompose'){ui.compose=null;render()}
+  else if(act==='tpl'){ui.compose.text=TPL.find(x=>x[0]===t.dataset.t)[2];render()}
+  else if(act==='sendCompose'){const me=B(ui.role);const map=Object.fromEntries(clientsOf(ui.role).map(c=>[c.name,c]));let n=0;
+    ui.compose.to.forEach(name=>{const c=map[name];if(!c||c.off)return;logMsg('Mensagem de '+me.name,c.name,c.phone,fill(ui.compose.text,c,me),'cliente');n++});
+    ui.compose=null;ui.cSel=new Set();save();render();toast(n+' mensage'+(n===1?'m enviada':'ns enviadas')+' pelo WhatsApp da barbearia')}
+  else if(act==='simulate'){let n=0;const tm=iso(new Date(Date.now()+864e5));
+    if(S.auto.remind) S.appts.filter(a=>a.date===tm&&a.status==='agendado').forEach(a=>{logMsg('Lembrete',a.client,a.phone,reminderText(a));n++});
+    if(S.auto.away){const last={};S.appts.filter(a=>a.status==='atendido').forEach(a=>{if(!last[a.client]||a.date>last[a.client].date)last[a.client]=a});
+      const lim=iso(new Date(Date.now()-30*864e5));Object.values(last).filter(a=>a.date<lim).slice(0,5).forEach(a=>{logMsg('Cliente sumido',a.client,a.phone,msgAway(a.client));n++})}
+    if(S.auto.barberDaily) S.barbers.forEach(b=>{logMsg('Agenda de amanhã',b.name,b.phone,msgBarberDaily(b,tm),'barbeiro');n++});
+    if(S.auto.ownerDaily){logMsg('Resumo do dia',S.owner.name,S.owner.phone,msgOwnerDaily(today),'dono');n++}
+    if(S.auto.ownerMonth){const first=today.slice(8)==='01';const pm=new Date();pm.setDate(0);
+      logMsg(first?'Fechamento do mês':'Fechamento parcial',S.owner.name,S.owner.phone,closeText(first?iso(pm).slice(0,7):today.slice(0,7)),'dono');n++}
+    save();render();toast(n?n+' mensagens enviadas (simulação)':'Nenhuma mensagem para enviar hoje com as automações ligadas')}
+  else if(act==='remind'){const a=S.appts.find(x=>x.id===t.dataset.id);share('Lembrete para '+a.client,reminderText(a))}
+  else if(act==='remindAll'){const w=S.appts.filter(a=>a.date===ui.day&&a.status==='agendado'&&(ui.barber==='all'||a.barberId===ui.barber)).sort((a,b)=>a.time.localeCompare(b.time));
+    share('Lembretes do dia',w.map(a=>`${a.time} · ${a.client} ${a.phone||''}\n${reminderText(a)}`).join('\n\n———\n\n'))}
+  else if(act==='copyClose'){share('Fechamento do mês',closeText())}
+  else if(act==='sell'){const p=S.products.find(x=>x.id===t.dataset.id);if(p.qty<1)return;p.qty--;S.sales.push({id:uid(),date:today,productId:p.id,qty:1,price:p.price,barberId:ui.saleBy});save();render();toast(p.name+' vendido por '+B(ui.saleBy).name)}
+  else if(act==='restock'){const p=S.products.find(x=>x.id===t.dataset.id);p.qty++;save();render()}
+  else if(act==='exportData'){
+    const name='cadeira-cheia-backup-'+today+'.json';
+    const blob=new Blob([JSON.stringify({app:'cadeira-cheia',version:2,savedAt:new Date().toISOString(),data:S},null,1)],{type:'application/json'});
+    const file=(typeof File==='function')?new File([blob],name,{type:'application/json'}):null;
+    const download=()=>{const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);toast('Backup salvo: '+name)};
+    if(file&&navigator.canShare&&navigator.canShare({files:[file]})&&matchMedia('(pointer:coarse)').matches){
+      navigator.share({files:[file],title:'Backup Cadeira Cheia'}).then(()=>toast('Backup pronto')).catch(err=>{if(err&&err.name!=='AbortError')download()});
+    } else download();
+  }
+  else if(act==='importData'){
+    const inp=document.createElement('input');inp.type='file';inp.accept='application/json,.json';
+    inp.onchange=()=>{const f=inp.files&&inp.files[0];if(!f)return;const r=new FileReader();
+      r.onload=()=>{try{const j=JSON.parse(r.result);const d=j&&j.data?j.data:j;
+        if(!d||!Array.isArray(d.barbers)||!Array.isArray(d.appts))throw new Error('formato');
+        if(!confirm('Restaurar este backup? Os dados atuais deste aparelho serão substituídos.'))return;
+        S=d;S.msgs=S.msgs||[];ui.saleBy=S.barbers[0]?S.barbers[0].id:'';save();render();toast('Backup restaurado')}
+        catch(err){toast('Esse arquivo não é um backup válido do Cadeira Cheia')}};
+      r.readAsText(f)};
+    inp.click();
+  }
+  else if(act==='reset'){if(!ui.resetArm){ui.resetArm=true;render();return}S=seed();ui.resetArm=false;ui.saleBy=S.barbers[0].id;save();render();toast('Dados de exemplo restaurados')}
+});
+app.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.id==='dayPick'&&t.value){ui.day=t.value;render()}
+  else if(t.id==='monthPick'&&t.value){ui.month=t.value;render()}
+  else if(t.id==='saleBy'){ui.saleBy=t.value}
+  else if(t.id==='shopIn'){S.shop=t.value.trim()||'Minha barbearia';save();render()}
+  else if(t.dataset.auto){S.auto[t.dataset.auto]=t.checked;save();render()}
+  else if(t.id==='prodCom'){S.prodCom=Math.max(0,Math.min(100,Number(t.value)||0));save()}
+  else if(t.dataset.csel!==undefined){const s=ui.cSel||(ui.cSel=new Set());t.checked?s.add(t.dataset.csel):s.delete(t.dataset.csel);render()}
+  else if(t.id==='showPhones'){S.showPhones=t.checked;save()}
+  else if(t.id==='ownerPhone'){S.owner.phone=t.value.trim();save()}
+  else if(t.dataset.edit==='phone'){B(t.dataset.id).phone=t.value.trim();save()}
+  else if(t.dataset.edit==='com'){B(t.dataset.id).com=Math.max(0,Math.min(100,Number(t.value)||0));save()}
+  else if(t.dataset.edit==='price'){SV(t.dataset.id).price=Math.max(0,Number(t.value)||0);save()}
+});
+app.addEventListener('input',e=>{
+  if(e.target.id!=='composeText'||!ui.compose) return;
+  ui.compose.text=e.target.value;
+  const c=clientsOf(ui.role).find(x=>x.name===ui.compose.to[0])||{name:'',ago:0};
+  const pv=document.getElementById('composePrev'); if(pv) pv.textContent=fill(ui.compose.text,c,B(ui.role));
+  const sb=app.querySelector('[data-act=sendCompose]'); if(sb) sb.disabled=!ui.compose.text.trim();
+});
+app.addEventListener('submit',e=>{
+  e.preventDefault(); const f=e.target; const v=id=>document.getElementById(id).value.trim();
+  if(f.id==='addForm'){const sv=SV(v('fService'));const na={id:uid(),date:ui.day,time:v('fTime'),client:v('fClient'),phone:v('fPhone'),barberId:v('fBarber'),serviceId:sv.id,price:sv.price,status:'agendado'};S.appts.push(na);
+    if(S.auto.confirm&&na.phone)logMsg('Confirmação',na.client,na.phone,msgConfirm(na));if(ui.role==='dono')notifyBarber(na,false);ui.addOpen=false;save();render();toast('Horário marcado')}
+  else if(f.id==='prodForm'){S.products.push({id:uid(),name:v('pName'),qty:Number(v('pQty'))||0,min:Number(v('pMin'))||0,price:Number(v('pPrice'))||0});save();render();toast('Produto adicionado')}
+  else if(f.id==='barberForm'){S.barbers.push({id:uid(),name:v('nbName'),com:Number(v('nbCom'))||0});save();render();toast('Barbeiro adicionado')}
+  else if(f.id==='serviceForm'){S.services.push({id:uid(),name:v('nsName'),price:Number(v('nsPrice'))||0});save();render();toast('Serviço adicionado')}
+});
+document.getElementById('modalRoot').addEventListener('click',e=>{if(e.target.classList.contains('modal'))e.currentTarget.innerHTML=''});
+render();
+})();
+</script>
+
+<script>
+if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{})})}
+if(navigator.storage&&navigator.storage.persist){navigator.storage.persist().catch(()=>{})}
+</script>
+</body>
+</html>
